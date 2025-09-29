@@ -21,7 +21,7 @@ Events App
 
 ### Вимоги
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download)
+- [.NET 9 SDK](https://dotnet.microsoft.com/en-us/download)
 - SQLite або PostgreSQL (за бажанням)
 - Visual Studio / VS Code
 
