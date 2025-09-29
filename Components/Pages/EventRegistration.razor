@@ -1,0 +1,237 @@
+@page "/register/{EventId:int}"
+@using EventEaseF.Models
+@using System.ComponentModel.DataAnnotations
+
+@using Microsoft.EntityFrameworkCore;
+@using Microsoft.AspNetCore.Components.Forms
+@using EventEaseF.Data
+@inject ApplicationDbContext Db
+@inject EventDbService EventService
+@inject RegistrationService RegistrationService
+
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+
+
+<PageTitle>Register - @(currentEvent?.Name ?? "Event") - EventEase</PageTitle>
+
+<div class="registration-page">
+    @if (currentEvent != null)
+    {
+        <div class="breadcrumb">
+            <a href="/events" class="breadcrumb-link">Events</a>
+            <span class="separator">→</span>
+            <a href="/events/@EventId" class="breadcrumb-link">@currentEvent.Name</a>
+            <span class="separator">→</span>
+            <span class="current">Registration</span>
+        </div>
+
+        @if (!isSubmitted)
+        {
+            <div class="registration-container">
+                <div class="event-summary">
+                    <h2>Event Summary</h2>
+                    <div class="summary-card">
+                        <h3>@currentEvent.Name</h3>
+                        <div class="summary-details">
+                            <div class="summary-item">
+                                <span class="icon">📅</span>
+                                <span>@currentEvent.Date.ToString("MMM dd, yyyy - HH:mm")</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="icon">📍</span>
+                                <span>@currentEvent.Location</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="icon">💰</span>
+                                <span>@(currentEvent.Price == 0 ? "Free" : $"${currentEvent.Price:F2}")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="registration-form">
+                    <h2>Registration Details</h2>
+                    
+                    <EditForm Model="registration" OnValidSubmit="HandleValidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+                        <div class="form-group">
+                            <label for="firstName">First Name *</label>
+                            <InputText id="firstName" @bind-Value="registration.FirstName" class="form-control" />
+                            <ValidationMessage For="@(() => registration.FirstName)" class="validation-error" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="lastName">Last Name *</label>
+                            <InputText id="lastName" @bind-Value="registration.LastName" class="form-control" />
+                            <ValidationMessage For="@(() => registration.LastName)" class="validation-error" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="email">Email Address *</label>
+                            <InputText id="email" type="email" @bind-Value="registration.Email" class="form-control" />
+                            <ValidationMessage For="@(() => registration.Email)" class="validation-error" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="phone">Phone Number</label>
+                            <InputText id="phone" @bind-Value="registration.PhoneNumber" class="form-control" />
+                            <ValidationMessage For="@(() => registration.PhoneNumber)" class="validation-error" />
+                        </div>
+                        <div class="form-group">
+                            <label for="location">Location</label>
+                            <InputText id="location" @bind-Value="registration.Location" class="form-control" />
+                            <ValidationMessage For="@(() => registration.Location)" class="validation-error" />
+                        </div>
+                    
+
+                        <div class="form-group">
+                            <label for="company">Company/Organization</label>
+                            <InputText id="company" @bind-Value="registration.Company" class="form-control" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="dietaryRequirements">Dietary Requirements</label>
+                            <InputTextArea id="dietaryRequirements" @bind-Value="registration.DietaryRequirements" 
+                                         class="form-control" rows="3" placeholder="Please let us know about any dietary restrictions or allergies..." />
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label class="checkbox-label">
+                                <InputCheckbox @bind-Value="registration.AgreeToTerms" />
+                                <span class="checkmark"></span>
+                                I agree to the <a href="#" class="terms-link">terms and conditions</a> *
+                            </label>
+                            <ValidationMessage For="@(() => registration.AgreeToTerms)" class="validation-error" />
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label class="checkbox-label">
+                                <InputCheckbox @bind-Value="registration.SubscribeToNewsletter" />
+                                <span class="checkmark"></span>
+                                Subscribe to our newsletter for event updates
+                            </label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" @onclick="GoBack">
+                                Cancel
+                            </button>
+                            <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span>Processing...</span>
+                                }
+                                else
+                                {
+                                    <span>Complete Registration</span>
+                                }
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="success-message">
+                <div class="success-icon">✅</div>
+                <h2>Registration Successful!</h2>
+                <p>Thank you for registering for <strong>@currentEvent.Name</strong>.</p>
+                <p>A confirmation email has been sent to <strong>@registration.Email</strong>.</p>
+                
+                <div class="next-steps">
+                    <h3>Next Steps:</h3>
+                    <ul>
+                        <li>Check your email for event details and calendar invitation</li>
+                        <li>Save the event date: @currentEvent.Date.ToString("MMM dd, yyyy - HH:mm")</li>
+                        <li>Location: @currentEvent.Location</li>
+                    </ul>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-primary" @onclick="@(() => Navigation.NavigateTo("/events"))">
+                        Browse More Events
+                    </button>
+                    <button class="btn btn-secondary" @onclick="@(() => Navigation.NavigateTo($"/events/{EventId}"))">
+                        View Event Details
+                    </button>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="not-found">
+            <h2>Event Not Found</h2>
+            <p>The event you're trying to register for doesn't exist or has been removed.</p>
+            <a href="/events" class="btn btn-primary">Browse Other Events</a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int EventId { get; set; }
+
+    private Event? currentEvent;
+    private Registration registration = new();
+    private bool isSubmitting = false;
+    private bool isSubmitted = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEventAsync();
+    }
+
+    private async Task LoadEventAsync()
+    {
+        // Отримуємо івент з бази даних
+        currentEvent = await Db.Events.FirstOrDefaultAsync(e => e.Id == EventId);
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        isSubmitting = true;
+
+        // Отримуємо івент з реєстраціями
+        var eventEntity = await Db.Events
+            .Include(e => e.Registrations)
+            .FirstOrDefaultAsync(e => e.Id == EventId);
+
+        if (eventEntity == null)
+        {
+            isSubmitting = false;
+            return;
+        }
+
+        var currentCount = eventEntity.Registrations.Count;
+
+        if (currentCount >= eventEntity.MaxParticipants)
+        {
+            isSubmitting = false;
+            // Тут можна показати повідомлення про переповнення
+            return;
+        }
+
+        // Прив'язуємо реєстрацію до івенту
+        registration.EventId = EventId;
+        Db.Registrations.Add(registration);
+        await Db.SaveChangesAsync();
+
+        isSubmitting = false;
+        isSubmitted = true;
+    }
+
+
+
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo($"/events/{EventId}");
+    }
+
+   
+}
+

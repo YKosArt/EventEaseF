@@ -1,0 +1,177 @@
+@page "/events/{EventId:int}"
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Authorization
+@using EventEaseF.Services
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject EventDbService EventService
+@inject RegistrationService RegistrationService
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>@(currentEvent?.Name ?? "Event Details") - EventEase</PageTitle>
+
+<div class="event-details-page">
+    @if (currentEvent != null)
+    {
+        <div class="breadcrumb">
+            <a href="/events" class="breadcrumb-link">← Back to Events</a>
+        </div>
+
+        <div class="event-header">
+            <div class="event-image">
+                @if (!string.IsNullOrEmpty(currentEvent.ImageUrl))
+                {
+                    <img src="@currentEvent.ImageUrl" alt="@currentEvent.Name" />
+                }
+                else
+                {
+                    <div class="placeholder-image">
+                        <span class="placeholder-icon">🎉</span>
+                    </div>
+                }
+            </div>
+
+            <div class="event-info">
+                <h1>@currentEvent.Name</h1>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span><span class="label">Date:</span><span class="value">@currentEvent.Date.ToString("dddd, MMMM dd, yyyy")</span></div>
+                    <div class="meta-item"><span class="icon">⏰</span><span class="label">Time:</span><span class="value">@currentEvent.Date.ToString("HH:mm")</span></div>
+                    <div class="meta-item"><span class="icon">📍</span><span class="label">Location:</span><span class="value">@currentEvent.Location</span></div>
+                    <div class="meta-item"><span class="icon">🏷️</span><span class="label">Category:</span><span class="value">@currentEvent.Category</span></div>
+                    <div class="meta-item"><span class="icon">👥</span><span class="label">Participants:</span><span class="value">@currentEvent.CurrentParticipants / @currentEvent.MaxParticipants</span></div>
+                    <div class="meta-item"><span class="icon">💰</span><span class="label">Price:</span><span class="value">@(currentEvent.Price == 0 ? "Free" : $"${currentEvent.Price:F2}")</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="event-content">
+            <div class="description-section">
+                <h2>About This Event</h2>
+                <p>@(string.IsNullOrEmpty(currentEvent.Description) ? "No description available." : currentEvent.Description)</p>
+            </div>
+
+            <div class="registration-section">
+                <div class="availability">
+                    @if (IsFullyBooked)
+                    {
+                        <div class="status-badge fully-booked">Fully Booked</div>
+                    }
+                    else if (AvailableSpots <= 10)
+                    {
+                        <div class="status-badge limited-spots">@AvailableSpots spots left</div>
+                    }
+                    else
+                    {
+                        <div class="status-badge available">Available</div>
+                    }
+                </div>
+
+                <div class="action-buttons">
+                    @if (!isRegistered)
+                    {
+                        <button class="btn btn-primary" @onclick="RegisterForEvent" disabled="@IsFullyBooked">
+                            @(IsFullyBooked ? "Event Full" : "Register Now")
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-outline-danger" @onclick="UnregisterFromEvent">
+                            Cancel Registration
+                        </button>
+                    }
+
+                    <button class="btn btn-secondary" @onclick="ShareEvent">
+                        Share Event
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="not-found">
+            <h2>Event Not Found</h2>
+            <p>The event you're looking for doesn't exist or has been removed.</p>
+            <a href="/events" class="btn btn-primary">Browse Other Events</a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int EventId { get; set; }
+
+    private Event? currentEvent;
+    private string currentUserId = string.Empty;
+    private bool isRegistered = false;
+
+    private int AvailableSpots => currentEvent?.MaxParticipants - currentEvent?.CurrentParticipants ?? 0;
+    private bool IsFullyBooked => AvailableSpots <= 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshEventWithUser();
+    }
+
+    private async Task RefreshEventWithUser()
+    {
+        currentEvent = await EventService.GetEventByIdAsync(EventId);
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(userId))
+            {
+                currentUserId = userId;
+                isRegistered = await RegistrationService.IsUserRegisteredAsync(currentUserId, EventId);
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RegisterForEvent()
+    {
+        if (string.IsNullOrEmpty(currentUserId) || currentEvent == null)
+            return;
+
+        var registration = new Registration
+        {
+            EventId = currentEvent.Id,
+            UserId = currentUserId,
+            RegisteredAt = DateTime.UtcNow,
+            RegistrationDate = DateTime.UtcNow,
+            IsActive = true
+        };
+
+        var success = await RegistrationService.RegisterUserAsync(registration);
+        if (success)
+        {
+            await RefreshEventWithUser();
+        }
+    }
+
+    private async Task UnregisterFromEvent()
+    {
+        if (string.IsNullOrEmpty(currentUserId) || currentEvent == null)
+            return;
+
+        var success = await RegistrationService.UnregisterFromEventAsync(currentUserId, currentEvent.Id);
+        if (success)
+        {
+            await RefreshEventWithUser();
+        }
+    }
+
+    private async Task ShareEvent()
+    {
+        var url = Navigation.Uri;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        await JS.InvokeVoidAsync("alert", "Event link copied to clipboard!");
+    }
+}

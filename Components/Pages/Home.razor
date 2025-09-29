@@ -1,0 +1,274 @@
+﻿@page "/"
+@using EventEaseF.Services
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@inject EventDbService EventService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>EventEase - Головна</PageTitle>
+
+<div class="container-fluid mt-4">
+    <!-- Hero Section -->
+    <div class="jumbotron text-white p-5 mb-5">
+        <div class="text-center">
+            <h1 class="display-3 fw-bold mb-4">
+                <i class="fas fa-calendar-alt me-3"></i>EventEase
+            </h1>
+            <p class="lead fs-4 mb-4">
+                Ваша платформа для управління та участі у подіях
+            </p>
+            <p class="mb-4">
+                Відкрийте для себе найкращі події, зареєструйтеся онлайн та слідкуйте за своїм розкладом
+            </p>
+
+            <AuthorizeView Context="auth">
+                <Authorized>
+                    <div class="alert alert-success mb-4">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Вітаємо, <strong>@auth.User.Identity?.Name</strong>! Ви успішно увійшли.
+                    </div>
+                    <a class="btn btn-light btn-lg px-4" href="/events">
+                        <i class="fas fa-calendar-check me-2"></i>Переглянути події
+                    </a>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                        <a class="btn btn-light btn-lg px-4" href="/login">
+                            <i class="fas fa-sign-in-alt me-2"></i>Увійти
+                        </a>
+                        <a class="btn btn-outline-light btn-lg px-4" href="/register">
+                            <i class="fas fa-user-plus me-2"></i>Зареєструватися
+                        </a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </div>
+
+    <!-- Search Section -->
+    <div class="row mb-5">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-body">
+                    <h3 class="text-center mb-4">
+                        <i class="fas fa-search me-2"></i>Знайти подію
+                    </h3>
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text"
+                               class="form-control"
+                               placeholder="Пошук за назвою, описом або місцем..."
+                               @bind="searchTerm"
+                               @onkeypress="@(async (e) => { if (e.Key == "Enter") await SearchEvents(); })" />
+                        <button class="btn btn-primary px-4" @onclick="SearchEvents">
+                            Пошук
+                        </button>
+                    </div>
+                    @if (!string.IsNullOrEmpty(searchTerm))
+                    {
+                        <div class="mt-3 text-center">
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="ClearSearch">
+                                <i class="fas fa-times me-1"></i>Очистити пошук
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Section -->
+    <div class="row mb-5">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center h-100 border-primary">
+                <div class="card-body">
+                    <i class="fas fa-calendar-alt fa-3x text-primary mb-3"></i>
+                    <h4 class="text-primary">@totalEvents</h4>
+                    <p class="mb-0">Активних подій</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center h-100 border-success">
+                <div class="card-body">
+                    <i class="fas fa-clock fa-3x text-success mb-3"></i>
+                    <h4 class="text-success">@upcomingEvents</h4>
+                    <p class="mb-0">Майбутніх подій</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center h-100 border-info">
+                <div class="card-body">
+                    <i class="fas fa-users fa-3x text-info mb-3"></i>
+                    <h4 class="text-info">@totalParticipants</h4>
+                    <p class="mb-0">Зареєстрованих учасників</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center h-100 border-warning">
+                <div class="card-body">
+                    <i class="fas fa-chart-line fa-3x text-warning mb-3"></i>
+                    <h4 class="text-warning">@averageParticipants</h4>
+                    <p class="mb-0">Середня участь</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Featured Events -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="fas fa-star me-2 text-warning"></i>
+                    @if (!string.IsNullOrEmpty(searchTerm))
+                    {
+                        <span>Результати пошуку</span>
+                    }
+                    else
+                    {
+                        <span>Найближчі події</span>
+                    }
+                </h2>
+                @if (allEvents.Count > 6 && string.IsNullOrEmpty(searchTerm))
+                {
+                    <a href="/events" class="btn btn-outline-primary">
+                        Всі події <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        @if (displayEvents.Any())
+        {
+            @foreach (var eventItem in displayEvents.Take(6))
+            {
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <EventCard Event="eventItem" 
+                    OnViewDetails="NavigateToDetails"
+                    ShowActions="false" />
+                </div>
+            }
+        }
+        else
+        {
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-calendar-times fa-4x text-muted mb-4"></i>
+                        <h4 class="text-muted">
+                            @if (!string.IsNullOrEmpty(searchTerm))
+                            {
+                                <span>Подій за запитом "@searchTerm" не знайдено</span>
+                            }
+                            else
+                            {
+                                <span>Наразі немає доступних подій</span>
+                            }
+                        </h4>
+                        <p class="text-muted mb-4">
+                            @if (!string.IsNullOrEmpty(searchTerm))
+                            {
+                                <span>Спробуйте змінити критерії пошуку</span>
+                            }
+                            else
+                            {
+                                <span>Нові події з'являться найближчим часом</span>
+                            }
+                        </p>
+                        @if (!string.IsNullOrEmpty(searchTerm))
+                        {
+                            <button class="btn btn-primary" @onclick="ClearSearch">
+                                Показати всі події
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (displayEvents.Count > 6)
+    {
+        <div class="text-center mt-4">
+            <a href="/events" class="btn btn-primary btn-lg px-5">
+                Переглянути всі @displayEvents.Count подій
+                <i class="fas fa-arrow-right ms-2"></i>
+            </a>
+        </div>
+    }
+</div>
+
+
+@code {
+    private List<Event> allEvents = [];
+    private List<Event> displayEvents = [];
+    private string searchTerm = string.Empty;
+
+    private int totalEvents = 0;
+    private int upcomingEvents = 0;
+    private int totalParticipants = 0;
+    private int averageParticipants = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            allEvents = await EventService.GetAllEventsAsync();
+            displayEvents = allEvents;
+
+            var stats = await EventService.GetEventStatisticsAsync();
+
+            stats.TryGetValue("TotalEvents", out totalEvents);
+            stats.TryGetValue("UpcomingEvents", out upcomingEvents);
+            stats.TryGetValue("TotalParticipants", out totalParticipants);
+            stats.TryGetValue("AverageParticipants", out averageParticipants);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Home] Initialization error: {ex.Message}");
+        }
+    }
+
+private void NavigateToDetails(int eventId)
+    {
+        Navigation.NavigateTo($"/events/{eventId}");
+    }
+    
+    private async Task SearchEvents()
+    {
+        try
+        {
+            await Task.Delay(100);
+
+            if (string.IsNullOrWhiteSpace(searchTerm))
+            {
+                displayEvents = allEvents;
+            }
+            else
+            {
+                displayEvents = await EventService.SearchEventsAsync(searchTerm);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Home] Search error: {ex.Message}");
+        }
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = string.Empty;
+        displayEvents = allEvents;
+    }
+}

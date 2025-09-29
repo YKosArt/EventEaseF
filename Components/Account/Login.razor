@@ -1,0 +1,210 @@
+@page "/login"
+@using EventEaseF.Services
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Identity
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Http
+@using System.ComponentModel.DataAnnotations
+@inject IHttpContextAccessor HttpContextAccessor
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+
+
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Вхід - EventEase</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-5 col-md-7">
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-primary text-white text-center py-4">
+                    <h3 class="mb-0">
+                        <i class="fas fa-sign-in-alt me-2"></i>Вхід в систему
+                    </h3>
+                    <p class="mb-0 mt-2 opacity-75">Увійдіть до свого акаунту</p>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (!string.IsNullOrEmpty(ErrorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            @ErrorMessage
+                            <button type="button" class="btn-close" @onclick="() => ErrorMessage = string.Empty"></button>
+                        </div>
+                    }
+
+                    <EditForm Model="@loginModel" OnValidSubmit="@HandleLogin">
+                        <DataAnnotationsValidator />
+
+                        <div class="mb-4">
+                            <label for="email" class="form-label fw-semibold">
+                                <i class="fas fa-envelope me-2"></i>Email адреса
+                            </label>
+                            <InputText id="email"
+                                       class="form-control form-control-lg"
+                                       @bind-Value="loginModel.Email"
+                                       placeholder="your@email.com" />
+                            <ValidationMessage For="@(() => loginModel.Email)" class="text-danger mt-1" />
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="password" class="form-label fw-semibold">
+                                <i class="fas fa-lock me-2"></i>Пароль
+                            </label>
+                            <div class="input-group">
+                                <InputText id="password"
+                                           type="@(showPassword ? "text" : "password")"
+                                           class="form-control form-control-lg"
+                                           @bind-Value="loginModel.Password"
+                                           placeholder="Введіть пароль" />
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        @onclick="TogglePasswordVisibility">
+                                    <i class="fas @(showPassword ? "fa-eye-slash" : "fa-eye")"></i>
+                                </button>
+                            </div>
+                            <ValidationMessage For="@(() => loginModel.Password)" class="text-danger mt-1" />
+                        </div>
+
+                        <button type="submit"
+                                class="btn btn-primary btn-lg w-100 mb-3"
+                                disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                <span>Вхід...</span>
+                            }
+                            else
+                            {
+                                <i class="fas fa-sign-in-alt me-2"></i>
+                                <span>Увійти</span>
+                            }
+                        </button>
+                    </EditForm>
+
+                    <div class="text-center">
+                        <p class="text-muted mb-3">Немає акаунту?</p>
+                        <a href="/register" class="btn btn-outline-primary">
+                            <i class="fas fa-user-plus me-2"></i>Створити акаунт
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card-footer bg-light">
+                    <h6 class="text-center mb-3">
+                        <i class="fas fa-info-circle me-2"></i>Тестові акаунти
+                    </h6>
+                    <div class="row text-center">
+                        <div class="col-6 border-end">
+                            <small class="text-muted d-block">Адміністратор</small>
+                            <button class="btn btn-sm btn-outline-danger mt-1"
+                                    @onclick="@(() => FillCredentials("admin@eventease.com", "Admin@123"))">
+                                <i class="fas fa-crown me-1"></i>Admin
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Користувач</small>
+                            <button class="btn btn-sm btn-outline-primary mt-1"
+                                    @onclick="@(() => FillCredentials("user@example.com", "User@123"))">
+                                <i class="fas fa-user me-1"></i>User
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginModel loginModel = new();
+    private bool isLoading = false;
+    private bool showPassword = false;
+    private string ErrorMessage = string.Empty;
+
+
+    public class LoginModel
+    {
+        [Required(ErrorMessage = "Email обов'язковий")]
+        [EmailAddress(ErrorMessage = "Невірний формат email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Пароль обов'язковий")]
+        [MinLength(6, ErrorMessage = "Пароль має містити щонайменше 6 символів")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+private async Task HandleLogin()
+{
+    isLoading = true;
+    ErrorMessage = string.Empty;
+    Console.WriteLine($"[Login] Початок логіну: {loginModel.Email}");
+
+    try
+    {
+        var user = await UserManager.FindByEmailAsync(loginModel.Email);
+        if (user == null)
+        {
+            ErrorMessage = "Користувача не знайдено.";
+            Console.WriteLine("[Login] Користувача не знайдено");
+            isLoading = false;
+            return;
+        }
+
+        var isPasswordValid = await UserManager.CheckPasswordAsync(user, loginModel.Password);
+        if (!isPasswordValid)
+        {
+            ErrorMessage = "Невірний email або пароль.";
+            Console.WriteLine("[Login] Вхід неуспішний");
+            isLoading = false;
+            return;
+        }
+
+        var claims = await UserManager.GetClaimsAsync(user);
+        var roles = await UserManager.GetRolesAsync(user);
+
+        var identity = new ClaimsIdentity("Identity.Application");
+        identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName!));
+        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id));
+
+        foreach (var role in roles)
+            identity.AddClaim(new Claim(ClaimTypes.Role, role));
+
+        foreach (var claim in claims)
+            identity.AddClaim(claim);
+
+        var principal = new ClaimsPrincipal(identity);
+
+ //       await HttpContextAccessor.HttpContext!.SignInAsync("Identity.Application", principal);
+
+        Console.WriteLine("[Login] Успішний вхід");
+        Navigation.NavigateTo($"/redirect-login?email={user.Email}", forceLoad: true);
+
+ //       Navigation.NavigateTo("/redirect-login", forceLoad: true);
+        return;
+    }
+    catch (Exception ex)
+    {
+        ErrorMessage = "Сталася помилка при вході в систему. Спробуйте пізніше.";
+        Console.WriteLine($"Login error: {ex.Message}");
+        isLoading = false;
+    }
+
+
+}
+
+
+    private void TogglePasswordVisibility() => showPassword = !showPassword;
+
+    private void FillCredentials(string email, string password)
+    {
+        loginModel.Email = email;
+        loginModel.Password = password;
+        StateHasChanged();
+    }
+}

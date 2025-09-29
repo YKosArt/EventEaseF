@@ -1,0 +1,323 @@
+@page "/events"
+@using EventEaseF.Services
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@inject EventDbService EventService
+@inject NavigationManager Navigation
+@inject RegistrationService RegistrationService
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Події - EventEase</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="display-6">
+            <i class="fas fa-calendar-alt me-3 text-primary"></i>
+            Всі події
+        </h1>
+        <div class="badge bg-primary fs-6 px-3 py-2">
+            Знайдено: @filteredEvents.Count
+        </div>
+    </div>
+    
+    <!-- Filters Section -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-3">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" 
+                       class="form-control" 
+                       placeholder="Пошук за назвою, описом або місцем..." 
+                       @bind="searchTerm"
+                    @bind:event="oninput" />
+
+                @if (!string.IsNullOrEmpty(searchTerm))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                        <i class="fas fa-times"></i>
+                    </button>
+                }
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <select class="form-select" @bind="statusFilter">
+                <option value="all">Всі події</option>
+                <option value="upcoming">Майбутні</option>
+                <option value="past">Минулі</option>
+                <option value="available">З вільними місцями</option>
+                <option value="full">Заповнені</option>
+            </select>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <select class="form-select" @bind="sortBy">
+                <option value="date">За датою</option>
+                <option value="name">За назвою</option>
+                <option value="participants">За кількістю учасників</option>
+                <option value="availability">За доступністю місць</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    @if (authState.User.Identity?.IsAuthenticated == true)
+    {
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-calendar-check fa-2x mb-2"></i>
+                        <h4>@userRegisteredEvents.Count</h4>
+                        <small>Ваші події</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-clock fa-2x mb-2"></i>
+                        <h4>@userUpcomingEvents</h4>
+                        <small>Майбутні події</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-info text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-history fa-2x mb-2"></i>
+                        <h4>@userPastEvents</h4>
+                        <small>Відвідані події</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Events Grid -->
+    <div class="row">
+        @if (filteredEvents.Any())
+        {
+            @foreach (var eventItem in GetPagedEvents())
+            {
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <EventCard Event="eventItem" 
+                    OnViewDetails="NavigateToDetails"
+                              ShowActions="true" 
+                              OnEventChanged="LoadEvents" />
+                </div>
+            }
+        }
+        else
+        {
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-search-minus fa-4x text-muted mb-4"></i>
+                        <h3 class="text-muted">Подій не знайдено</h3>
+                        <p class="text-muted mb-4">
+                            @if (!string.IsNullOrEmpty(searchTerm) || statusFilter != "all")
+                            {
+                                <span>За вашими критеріями пошуку подій не знайдено.</span>
+                            }
+                            else
+                            {
+                                <span>Наразі в системі немає доступних подій.</span>
+                            }
+                        </p>
+                        <button class="btn btn-primary" @onclick="ClearAllFilters">
+                            <i class="fas fa-refresh me-2"></i>Очистити фільтри
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Pagination -->
+    @if (filteredEvents.Count > eventsPerPage)
+    {
+        <div class="d-flex justify-content-center mt-5">
+            <nav>
+                <ul class="pagination pagination-lg">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)" disabled="@(currentPage == 1)">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                    </li>
+                    
+                    @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                    {
+                        <li class="page-item @(i == currentPage ? "active" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                        </li>
+                    }
+                    
+                    <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        
+        <div class="text-center text-muted">
+            Показано @((currentPage - 1) * eventsPerPage + 1)-@(Math.Min(currentPage * eventsPerPage, filteredEvents.Count)) з @filteredEvents.Count подій
+        </div>
+    }
+</div>
+
+@code {
+    private List<Event> allEvents = [];
+    private List<Event> filteredEvents = [];
+    private List<Event> userRegisteredEvents = [];
+    private string searchTerm
+{
+    get => _searchTerm;
+    set
+    {
+        _searchTerm = value;
+        _ = FilterEvents();
+    }
+}
+private string _searchTerm = string.Empty;
+
+    private string statusFilter = "all";
+    private string sortBy = "date";
+    private int currentPage = 1;
+    private int eventsPerPage = 9;
+    private int totalPages => (int)Math.Ceiling((double)filteredEvents.Count / eventsPerPage);
+    
+    // User statistics
+    private int userUpcomingEvents;
+    private int userPastEvents;
+    private string currentUserId = string.Empty;
+
+    
+    private AuthenticationState authState = new(new System.Security.Claims.ClaimsPrincipal());
+
+    protected override async Task OnInitializedAsync()
+{
+    try
+    {
+    authState = await AuthStateProvider.GetAuthenticationStateAsync();
+    var user = authState.User;
+  
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(userId))
+            {
+                currentUserId = userId;
+                await LoadUserStatisticsAsync();
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error getting authentication state: {ex.Message}");
+    }
+
+    await LoadEvents();
+}
+
+
+    private async Task LoadEvents()
+    {
+        allEvents = await EventService.GetAllEventsAsync();
+        await FilterEvents();
+        StateHasChanged();
+    }
+
+    private async Task LoadUserStatisticsAsync()
+{
+    userRegisteredEvents = await RegistrationService.GetUserEventsAsync(currentUserId);
+    userUpcomingEvents = userRegisteredEvents.Count(e => e.IsUpcoming);
+    userPastEvents = userRegisteredEvents.Count(e => e.IsPast);
+}
+
+
+    private async Task FilterEvents()
+    {
+        await Task.Delay(100); // Debounce
+        
+        var events = allEvents.AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim().ToLowerInvariant();
+            events = events.Where(e => 
+                e.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                e.Description.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                e.Location.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Apply status filter
+        events = statusFilter switch
+        {
+            "upcoming" => events.Where(e => e.IsUpcoming),
+            "past" => events.Where(e => e.IsPast),
+            "available" => events.Where(e => !e.IsFull && e.IsUpcoming),
+            "full" => events.Where(e => e.IsFull),
+            _ => events
+        };
+
+        // Apply sorting
+        events = sortBy switch
+        {
+            "name" => events.OrderBy(e => e.Name),
+            "participants" => events.OrderByDescending(e => e.RegisteredUserIds.Count),
+            "availability" => events.OrderByDescending(e => e.AvailableSpots),
+            _ => events.OrderBy(e => e.Date)
+        };
+
+        filteredEvents = events.ToList();
+        currentPage = 1; // Reset to first page when filtering
+        StateHasChanged();
+    }
+
+private void NavigateToDetails(int eventId)
+    {
+        Navigation.NavigateTo($"/events/{eventId}");
+    }
+
+    private List<Event> GetPagedEvents()
+    {
+        var startIndex = (currentPage - 1) * eventsPerPage;
+        return filteredEvents.Skip(startIndex).Take(eventsPerPage).ToList();
+    }
+
+    private void ChangePage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        await FilterEvents();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        statusFilter = "all";
+        sortBy = "date";
+        await FilterEvents();
+    }
+
+    private void FilterEventsSync()
+    {
+        _ = InvokeAsync(FilterEvents);
+    }
+}

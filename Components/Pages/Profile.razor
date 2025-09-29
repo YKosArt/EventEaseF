@@ -1,0 +1,393 @@
+@page "/profile"
+@using EventEaseF.Services
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject UserService UserService
+@inject RegistrationService RegistrationService
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Профіль - EventEase</PageTitle>
+
+<div class="container mt-4">
+    @if (currentUser != null)
+    {
+        <div class="row">
+            <!-- Profile Information -->
+            <div class="col-lg-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">
+                            <i class="fas fa-user me-2"></i>Профіль користувача
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-center mb-4">
+                            <div class="bg-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
+                                 style="width: 80px; height: 80px;">
+                                <i class="fas fa-user fa-2x text-white"></i>
+                            </div>
+                            <h5 class="fw-bold">@currentUser.Name</h5>
+                            <p class="text-muted">@currentUser.Email</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <strong>Роль:</strong>
+                            <span class="badge @(currentUser.Role == UserRole.Administrator ? "bg-danger" : "bg-primary") ms-2">
+                                @(currentUser.Role == UserRole.Administrator ? "Адміністратор" : "Користувач")
+                            </span>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <strong>Статус:</strong>
+                            <span class="badge @(currentUser.IsActive ? "bg-success" : "bg-secondary") ms-2">
+                                @(currentUser.IsActive ? "Активний" : "Заблокований")
+                            </span>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <strong>Дата реєстрації:</strong>
+                            <div class="text-muted">@currentUser.CreatedAt.ToString("dd MMMM yyyy", new System.Globalization.CultureInfo("uk-UA"))</div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <button class="btn btn-outline-primary w-100" @onclick="ShowEditProfileModal">
+                            <i class="fas fa-edit me-2"></i>Редагувати профіль
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Statistics Card -->
+                <div class="card mt-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>Статистика
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6 border-end">
+                                <h3 class="text-primary">@registeredEvents.Count</h3>
+                                <small class="text-muted">Всього подій</small>
+                            </div>
+                            <div class="col-6">
+                                <h3 class="text-success">@upcomingEventsCount</h3>
+                                <small class="text-muted">Майбутніх</small>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row text-center">
+                            <div class="col-6 border-end">
+                                <h3 class="text-info">@pastEventsCount</h3>
+                                <small class="text-muted">Відвіданих</small>
+                            </div>
+                            <div class="col-6">
+                                <h3 class="text-warning">@(DateTime.Now.Year - currentUser.CreatedAt.Year)</h3>
+                                <small class="text-muted">Років з нами</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Events Section -->
+            <div class="col-lg-8">
+                <!-- Navigation Tabs -->
+                <ul class="nav nav-pills nav-fill mb-4" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "upcoming" ? "active" : "")" 
+                                @onclick="@(() => SetActiveTab("upcoming"))">
+                            <i class="fas fa-clock me-2"></i>
+                            Майбутні події (@upcomingEventsCount)
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "past" ? "active" : "")" 
+                                @onclick="@(() => SetActiveTab("past"))">
+                            <i class="fas fa-history me-2"></i>
+                            Відвідані події (@pastEventsCount)
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "all" ? "active" : "")" 
+                                @onclick="@(() => SetActiveTab("all"))">
+                            <i class="fas fa-calendar me-2"></i>
+                            Всі події (@registeredEvents.Count)
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Events Content -->
+                <div class="tab-content">
+                    @if (GetDisplayEvents().Any())
+                    {
+                        <div class="row">
+                            @foreach (var eventItem in GetDisplayEvents())
+                            {
+                                <div class="col-md-6 mb-4">
+                                    <div class="card h-100 @(eventItem.IsPast ? "opacity-75" : "")">
+                                        @if (eventItem.IsPast)
+                                        {
+                                            <div class="card-header bg-secondary text-white text-center py-2">
+                                                <small><i class="fas fa-check-circle me-1"></i>Завершена подія</small>
+                                            </div>
+                                        }
+                                        else if (IsEventSoon(eventItem))
+                                        {
+                                            <div class="card-header bg-warning text-dark text-center py-2">
+                                                <small><i class="fas fa-exclamation-triangle me-1"></i>Скоро почнеться!</small>
+                                            </div>
+                                        }
+                                        
+                                        <div class="card-body">
+                                            <h6 class="card-title fw-bold">@eventItem.Name</h6>
+                                            <p class="card-text text-muted small mb-2">@eventItem.Description</p>
+                                            
+                                            <div class="mb-2">
+                                                <small class="text-muted d-block">
+                                                    <i class="fas fa-calendar me-1"></i>
+                                                    @eventItem.Date.ToString("dd MMMM yyyy", new System.Globalization.CultureInfo("uk-UA"))
+                                                </small>
+                                                <small class="text-muted d-block">
+                                                    <i class="fas fa-clock me-1"></i>
+                                                    @eventItem.Date.ToString("HH:mm")
+                                                </small>
+                                                <small class="text-muted d-block">
+                                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                                    @eventItem.Location
+                                                </small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-users me-1"></i>
+                                                    @eventItem.RegisteredUserIds.Count / @eventItem.MaxParticipants учасників
+                                                </small>
+                                                <div class="progress mt-1" style="height: 6px;">
+                                                    <div class="progress-bar bg-success" 
+                                                         style="width: @((double)eventItem.RegisteredUserIds.Count / eventItem.MaxParticipants * 100)%"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        @if (eventItem.IsUpcoming)
+                                        {
+                                            <div class="card-footer bg-transparent">
+                                                <button class="btn btn-outline-danger btn-sm w-100" 
+                                                        @onclick="() => UnregisterFromEvent(eventItem.Id)">
+                                                    <i class="fas fa-times me-1"></i>Скасувати участь
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="card">
+                            <div class="card-body text-center py-5">
+                                <i class="fas fa-calendar-times fa-4x text-muted mb-4"></i>
+                                <h4 class="text-muted mb-3">
+                                    @GetEmptyStateMessage()
+                                </h4>
+                                <p class="text-muted mb-4">
+                                    @GetEmptyStateDescription()
+                                </p>
+                                <a href="/events" class="btn btn-primary">
+                                    <i class="fas fa-plus me-2"></i>Знайти події
+                                </a>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Edit Profile Modal -->
+@if (showEditProfileModal && editUser != null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>Редагувати профіль
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="HideEditProfileModal"></button>
+                </div>
+                <EditForm Model="@editUser" OnValidSubmit="@SaveProfile">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Ім'я</label>
+                            <InputText class="form-control" @bind-Value="editUser.Name" />
+                            <ValidationMessage For="@(() => editUser.Name)" />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <InputText class="form-control" @bind-Value="editUser.Email" />
+                            <ValidationMessage For="@(() => editUser.Email)" />
+                            <div class="form-text">
+                                Зміна email може потребувати повторного входу в систему
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideEditProfileModal">
+                            Скасувати
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Зберегти
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    private ApplicationUser? currentUser;
+    private ApplicationUser? editUser;
+    private List<Event> registeredEvents = [];
+    private string activeTab = "upcoming";
+    private bool showEditProfileModal = false;
+    private bool isSaving = false;
+
+    private int upcomingEventsCount => registeredEvents.Count(e => e.IsUpcoming);
+    private int pastEventsCount => registeredEvents.Count(e => e.IsPast);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+            {
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    currentUser = await UserService.GetUserByIdAsync(userId);
+                    await LoadRegisteredEventsAsync(userId);
+                }
+            }
+        }
+         catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading profile: {ex.Message}");
+        }
+    }
+
+    private async Task LoadRegisteredEventsAsync(string userId)
+    {
+        registeredEvents = await RegistrationService.GetUserEventsAsync(userId);
+        StateHasChanged();
+    }
+
+    private List<Event> GetDisplayEvents()
+    {
+        return activeTab switch
+        {
+            "upcoming" => registeredEvents.Where(e => e.IsUpcoming).OrderBy(e => e.Date).ToList(),
+            "past" => registeredEvents.Where(e => e.IsPast).OrderByDescending(e => e.Date).ToList(),
+            _ => registeredEvents.OrderBy(e => e.Date).ToList()
+        };
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        StateHasChanged();
+    }
+
+    private string GetEmptyStateMessage() => activeTab switch
+    {
+        "upcoming" => "Немає майбутніх подій",
+        "past" => "Немає відвіданих подій",
+        _ => "Ви ще не зареєстровані на жодну подію"
+    };
+
+    private string GetEmptyStateDescription() => activeTab switch
+    {
+        "upcoming" => "Зареєструйтеся на події, які вас цікавлять",
+        "past" => "Відвідані події з'являться тут після їх завершення",
+        _ => "Почніть з пошуку цікавих подій для участі"
+    };
+
+    private bool IsEventSoon(Event eventItem) =>
+        eventItem.IsUpcoming && (eventItem.Date - DateTime.Now).TotalHours <= 24;
+
+    private async Task UnregisterFromEvent(int eventId)
+    {
+        if (currentUser != null)
+        {
+            var success = await RegistrationService.UnregisterFromEventAsync(currentUser.Id, eventId);
+            if (success)
+            {
+                await LoadRegisteredEventsAsync(currentUser.Id);
+            }
+        }
+    }
+
+    private void ShowEditProfileModal()
+    {
+        if (currentUser != null)
+        {
+            editUser = new ApplicationUser
+            {
+                Id = currentUser.Id,
+                Name = currentUser.Name,
+                Email = currentUser.Email,
+                Role = currentUser.Role,
+                IsActive = currentUser.IsActive,
+                CreatedAt = currentUser.CreatedAt,
+                RegisteredEventIds = new(currentUser.RegisteredEventIds)
+            };
+            showEditProfileModal = true;
+        }
+    }
+
+    private void HideEditProfileModal()
+    {
+        showEditProfileModal = false;
+        editUser = null;
+    }
+
+    private async Task SaveProfile()
+    {
+        if (editUser == null) return;
+
+        isSaving = true;
+
+        try
+        {
+            var success = await UserService.UpdateUserAsync(editUser);
+            if (success)
+            {
+                currentUser = editUser;
+                HideEditProfileModal();
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
+

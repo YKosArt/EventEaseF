@@ -1,0 +1,713 @@
+@page "/admin/users"
+@using EventEaseF.Services
+@using EventEaseF.Models
+@inject UserService UserService
+@inject RegistrationService RegistrationService
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>Управління користувачами - EventEase</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3>
+            <i class="fas fa-users me-2"></i>Управління користувачами
+        </h3>
+        <p class="text-muted mb-0">Керуйте користувачами системи та їх правами доступу</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" @onclick="RefreshUsers">
+            <i class="fas fa-sync me-1"></i>Оновити
+        </button>
+        <div class="badge bg-primary fs-6 px-3 py-2">
+            Знайдено: @filteredUsers.Count
+        </div>
+    </div>
+</div>
+
+<!-- Filters and Search -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" class="form-control" placeholder="Пошук користувачів..." 
+                                   @bind="searchTerm" @oninput="FilterUsers" />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" @bind="roleFilter" >
+                            <option value="all">Всі ролі</option>
+                            <option value="User">Користувачі</option>
+                            <option value="Administrator">Адміністратори</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" @bind="statusFilter">
+                            <option value="all">Всі статуси</option>
+                            <option value="active">Активні</option>
+                            <option value="inactive">Заблоковані</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="row">
+            <div class="col-6">
+                <div class="card bg-primary text-white text-center">
+                    <div class="card-body py-3">
+                        <h5>@totalUsers</h5>
+                        <small>Всього</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card bg-success text-white text-center">
+                    <div class="card-body py-3">
+                        <h5>@activeUsers</h5>
+                        <small>Активних</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="card">
+    <div class="card-body">
+        @if (filteredUsers.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Користувач</th>
+                            <th>Email</th>
+                            <th>Роль</th>
+                            <th>Статус</th>
+                            <th>Дата реєстрації</th>
+                            <th>Події</th>
+                            <th>Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in GetPagedUsers())
+                        {
+                            <tr>
+                                <td>
+                                    <span class="badge bg-secondary">#@user.Id</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center me-3" 
+                                             style="width: 35px; height: 35px;">
+                                            <i class="fas fa-user text-white small"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold">@user.Name</div>
+                                            <small class="text-muted">
+                                                @if (IsRecentUser(user))
+                                                {
+                                                    <span class="badge bg-success small">Новий</span>
+                                                }
+                                            </small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>@user.Email</td>
+                                <td>
+                                    <span class="badge @(user.Role == UserRole.Administrator ? "bg-danger" : "bg-primary") fs-6">
+                                        @(user.Role == UserRole.Administrator ? "Адміністратор" : "Користувач")
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge @(user.IsActive ? "bg-success" : "bg-secondary") fs-6">
+                                        @(user.IsActive ? "Активний" : "Заблокований")
+                                    </span>
+                                </td>
+                                <td>
+                                    <div>
+                                        <div>@user.CreatedAt.ToString("dd.MM.yyyy")</div>
+                                        <small class="text-muted">@user.CreatedAt.ToString("HH:mm")</small>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-info fs-6" title="Кількість зареєстрованих подій">
+                                        @user.RegisteredEventIds.Count
+                                    </span>
+                                    @if (user.RegisteredEventIds.Any())
+                                    {
+                                        <br><small class="text-muted">подій</small>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-sm btn-outline-info" 
+                                                @onclick="() => ShowUserDetails(user.Id)"
+                                                title="Переглянути деталі">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-primary" 
+                                                @onclick="() => ShowEditUserModal(user)"
+                                                title="Редагувати">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        @if (user.Role != UserRole.Administrator)
+                                        {
+                                            <button class="btn btn-sm @(user.IsActive ? "btn-outline-warning" : "btn-outline-success")" 
+                                                    @onclick="() => ToggleUserStatus(user.Id)"
+                                                    title="@(user.IsActive ? "Заблокувати" : "Розблокувати")">
+                                                <i class="fas @(user.IsActive ? "fa-ban" : "fa-check")"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    @onclick="() => ShowDeleteConfirmation(user.Id)"
+                                                    title="Видалити">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            @if (filteredUsers.Count > pageSize)
+            {
+                <nav class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                        </li>
+                        
+                        @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                        {
+                            <li class="page-item @(i == currentPage ? "active" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                            </li>
+                        }
+                        
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+                
+                <div class="text-center text-muted">
+                    Показано @((currentPage - 1) * pageSize + 1)-@(Math.Min(currentPage * pageSize, filteredUsers.Count)) з @filteredUsers.Count користувачів
+                </div>
+            }
+        }
+        else
+        {
+            <div class="text-center py-5">
+                <i class="fas fa-users-slash fa-4x text-muted mb-4"></i>
+                <h4 class="text-muted">Користувачів не знайдено</h4>
+                <p class="text-muted">
+                    @if (!string.IsNullOrEmpty(searchTerm) || roleFilter != "all" || statusFilter != "all")
+                    {
+                        <span>За вашими критеріями пошуку користувачів не знайдено.</span>
+                    }
+                    else
+                    {
+                        <span>В системі ще немає зареєстрованих користувачів.</span>
+                    }
+                </p>
+                <button class="btn btn-primary" @onclick="ClearFilters">
+                    <i class="fas fa-refresh me-2"></i>Очистити фільтри
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+@if (showUserModal && editingUser != null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user-edit me-2"></i>Редагувати користувача
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="HideUserModal"></button>
+                </div>
+                <EditForm Model="@editingUser" OnValidSubmit="@SaveUser">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Ім'я</label>
+                            <InputText class="form-control" @bind-Value="editingUser.Name" />
+                            <ValidationMessage For="@(() => editingUser.Name)" class="text-danger" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Email</label>
+                            <InputText class="form-control" @bind-Value="editingUser.Email" />
+                            <ValidationMessage For="@(() => editingUser.Email)" class="text-danger" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Роль</label>
+                            <InputSelect class="form-select" @bind-Value="editingUser.Role">
+                                <option value="@UserRole.User">Користувач</option>
+                                <option value="@UserRole.Administrator">Адміністратор</option>
+                            </InputSelect>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Адміністратори мають доступ до панелі управління
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <InputCheckbox class="form-check-input" @bind-Value="editingUser.IsActive" />
+                                <label class="form-check-label fw-semibold">Активний користувач</label>
+                                <div class="form-text">Заблоковані користувачі не можуть увійти в систему</div>
+                            </div>
+                        </div>
+
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Статистика користувача</h6>
+                                <div class="row text-center">
+                                    <div class="col-4">
+                <div class="fw-semibold text-primary">@editingUser.RegisteredEventIds.Count</div>
+                <small class="text-muted">Подій</small>
+            </div>
+            <div class="col-4">
+                <div class="fw-semibold text-success">@userUpcomingCount</div>
+                <small class="text-muted">Майбутніх</small>
+            </div>
+            <div class="col-4">
+                <div class="fw-semibold text-info">@userPastCount</div>
+                <small class="text-muted">Відвіданих</small>
+            </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideUserModal">
+                            Скасувати
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            <i class="fas fa-save me-1"></i>
+                            Зберегти
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+
+<!-- User Details Modal -->
+@if (showUserDetailsModal && selectedUser != null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user me-2"></i>
+                        Деталі користувача: @selectedUser.Name
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="HideUserDetailsModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3">Основна інформація</h6>
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td class="fw-semibold">ID:</td>
+                                    <td>#@selectedUser.Id</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Ім'я:</td>
+                                    <td>@selectedUser.Name</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Email:</td>
+                                    <td>@selectedUser.Email</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Роль:</td>
+                                    <td>
+                                        <span class="badge @(selectedUser.Role == UserRole.Administrator ? "bg-danger" : "bg-primary")">
+                                            @(selectedUser.Role == UserRole.Administrator ? "Адміністратор" : "Користувач")
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Статус:</td>
+                                    <td>
+                                        <span class="badge @(selectedUser.IsActive ? "bg-success" : "bg-secondary")">
+                                            @(selectedUser.IsActive ? "Активний" : "Заблокований")
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Дата реєстрації:</td>
+                                    <td>@selectedUser.CreatedAt.ToString("dd MMMM yyyy, HH:mm", new System.Globalization.CultureInfo("uk-UA"))</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3">Події користувача (@userEvents.Count)</h6>
+                            @if (userEvents.Any())
+                            {
+                                <div class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;">
+                                    @foreach (var eventItem in userEvents.Take(10))
+                                    {
+                                        <div class="list-group-item px-0">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <div class="fw-semibold small">@eventItem.Name</div>
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-calendar me-1"></i>
+                                                        @eventItem.Date.ToString("dd.MM.yyyy HH:mm")
+                                                    </small>
+                                                    <br>
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-map-marker-alt me-1"></i>
+                                                        @eventItem.Location
+                                                    </small>
+                                                </div>
+                                                <span class="badge @(eventItem.Date > DateTime.Now ? "bg-success" : "bg-info") small">
+                                                    @(eventItem.Date > DateTime.Now ? "Майбутня" : "Відвідана")
+                                                </span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                                
+                                @if (userEvents.Count > 10)
+                                {
+                                    <div class="text-center mt-2">
+                                        <small class="text-muted">... та ще @(userEvents.Count - 10) подій</small>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="text-center py-4">
+                                    <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                                    <p class="text-muted">Користувач не зареєстрований на жодну подію</p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideUserDetailsModal">
+                        Закрити
+                    </button>
+                    <button type="button" class="btn btn-primary" @onclick="() => ShowEditUserModal(selectedUser)">
+                        <i class="fas fa-edit me-2"></i>Редагувати користувача
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (showDeleteModal)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Підтвердження видалення
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="HideDeleteModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">Ви впевнені, що хочете видалити цього користувача?</p>
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Увага!</strong> Ця дія незворотна. Користувач та всі його дані будуть видалені назавжди.
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Реєстрації користувача на події будуть також видалені.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideDeleteModal">
+                        Скасувати
+                    </button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@isDeleting">
+                        @if (isDeleting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        <i class="fas fa-trash me-1"></i>
+                        Видалити назавжди
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    private List<ApplicationUser> allUsers = [];
+    private List<ApplicationUser> filteredUsers = [];
+    private List<Event> userEvents = [];
+
+    private bool showUserModal = false;
+    private bool showUserDetailsModal = false;
+    private bool showDeleteModal = false;
+    private bool isSaving = false;
+    private bool isDeleting = false;
+
+    private ApplicationUser? editingUser;
+    private ApplicationUser? selectedUser;
+    public string Email { get; set; } = string.Empty;
+    private string userToDelete = string.Empty;
+
+    private string searchTerm = string.Empty;
+    private string roleFilter = "all";
+    private string statusFilter = "all";
+
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages => (int)Math.Ceiling((double)filteredUsers.Count / pageSize);
+
+    private int totalUsers => allUsers.Count;
+    private int activeUsers => allUsers.Count(u => u.IsActive);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading users: {ex.Message}");
+        }
+    }
+
+    private async Task LoadUsers()
+    {
+        allUsers = await UserService.GetAllUsersAsync();
+        FilterUsers();
+        StateHasChanged();
+    }
+
+    private void FilterUsers()
+    {
+        var users = allUsers.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim().ToLowerInvariant();
+            users = users.Where(u =>
+                (!string.IsNullOrEmpty(u.Name) && u.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+    (!string.IsNullOrEmpty(u.Email) && u.Email.Contains(term, StringComparison.OrdinalIgnoreCase)));
+
+        }
+
+        if (roleFilter != "all" && Enum.TryParse<UserRole>(roleFilter, out var role))
+        {
+            users = users.Where(u => u.Role == role);
+        }
+
+        users = statusFilter switch
+        {
+            "active" => users.Where(u => u.IsActive),
+            "inactive" => users.Where(u => !u.IsActive),
+            _ => users
+        };
+
+        filteredUsers = users.OrderBy(u => u.Name).ToList();
+        currentPage = 1;
+    }
+
+    private List<ApplicationUser> GetPagedUsers()
+    {
+        var startIndex = (currentPage - 1) * pageSize;
+        return filteredUsers.Skip(startIndex).Take(pageSize).ToList();
+    }
+
+    private void ChangePage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+        }
+    }
+
+    private void ClearFilters()
+    {
+        searchTerm = string.Empty;
+        roleFilter = "all";
+        statusFilter = "all";
+        FilterUsers();
+    }
+
+    private async Task RefreshUsers() => await LoadUsers();
+
+    private int userUpcomingCount = 0;
+private int userPastCount = 0;
+
+
+
+    private async Task ShowEditUserModal(ApplicationUser user)
+    {
+        editingUser = new ApplicationUser
+        {
+            Id = user.Id,
+            Name = user.Name,
+            Email = user.Email,
+            Role = user.Role,
+            IsActive = user.IsActive,
+            CreatedAt = user.CreatedAt,
+            RegisteredEventIds = new(user.RegisteredEventIds)
+        };
+        var upcoming = await RegistrationService.GetUserUpcomingEventsAsync(user.Id);
+    var past = await RegistrationService.GetUserPastEventsAsync(user.Id);
+
+    userUpcomingCount = upcoming.Count;
+    userPastCount = past.Count;
+
+    showUserModal = true;
+    showUserDetailsModal = false;
+    StateHasChanged();
+
+    }
+
+    private void HideUserModal()
+    {
+        showUserModal = false;
+        editingUser = null;
+    }
+
+    private async Task SaveUser()
+    {
+        if (editingUser == null) return;
+
+        isSaving = true;
+
+        try
+        {
+            var success = await UserService.UpdateUserAsync(editingUser);
+            if (success)
+            {
+                await LoadUsers();
+                HideUserModal();
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task ShowUserDetails(string userId)
+    {
+        selectedUser = await UserService.GetUserByIdAsync(userId);
+        if (selectedUser != null)
+        {
+            userEvents = await RegistrationService.GetUserEventsAsync(userId);
+
+        }
+        showUserDetailsModal = true;
+    }
+
+    private void HideUserDetailsModal()
+    {
+        showUserDetailsModal = false;
+        selectedUser = null;
+        userEvents.Clear();
+    }
+
+    private async Task ToggleUserStatus(string userId)
+    {
+        var user = await UserService.GetUserByIdAsync(userId);
+        if (user != null)
+        {
+            user.IsActive = !user.IsActive;
+            await UserService.UpdateUserAsync(user);
+            await LoadUsers();
+        }
+    }
+
+    private void ShowDeleteConfirmation(string userId)
+    {
+        userToDelete = userId;
+        showDeleteModal = true;
+    }
+
+    private void HideDeleteModal()
+    {
+        showDeleteModal = false;
+        userToDelete = string.Empty;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        isDeleting = true;
+
+        try
+        {
+            var success = await UserService.DeleteUserAsync(userToDelete);
+            if (success)
+            {
+                await LoadUsers();
+                HideDeleteModal();
+            }
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private bool IsRecentUser(ApplicationUser user) =>
+        (DateTime.Now - user.CreatedAt).TotalDays <= 7;
+
+    private async Task<int> GetUserUpcomingEventsAsync(string userId)
+{
+    var events = await RegistrationService.GetUserUpcomingEventsAsync(userId);
+    return events.Count;
+}
+
+
+    private async Task<int> GetUserPastEventsAsync(string userId)
+{
+    var events = await RegistrationService.GetUserPastEventsAsync(userId);
+    return events.Count;
+}
+
+}

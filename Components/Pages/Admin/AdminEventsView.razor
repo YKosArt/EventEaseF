@@ -1,0 +1,372 @@
+@using EventEaseF.Services
+@using EventEaseF.Models
+@inject EventDbService EventService
+@inject RegistrationService RegistrationService
+@inject UserService UserService
+@rendermode InteractiveServer
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3>
+            <i class="fas fa-calendar me-2"></i>Управління подіями
+        </h3>
+        <p class="text-muted mb-0">Створюйте, редагуйте та керуйте всіма подіями системи</p>
+    </div>
+    <button class="btn btn-primary" @onclick="ShowCreateEventModal">
+        <i class="fas fa-plus me-2"></i>Створити подію
+    </button>
+</div>
+
+<!-- Events Table -->
+<div class="card">
+    <div class="card-body">
+        @if (events.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Назва</th>
+                            <th>Дата та час</th>
+                            <th>Місце</th>
+                            <th>Учасники</th>
+                            <th>Статус</th>
+                            <th>Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var eventItem in events)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="badge bg-secondary">#@eventItem.Id</span>
+                                </td>
+                                <td>
+                                    <div>
+                                        <div class="fw-semibold">@eventItem.Name</div>
+                                        <small class="text-muted">@TruncateText(eventItem.Description, 50)</small>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div>
+                                        <div>@eventItem.Date.ToString("dd.MM.yyyy")</div>
+                                        <small class="text-muted">@eventItem.Date.ToString("HH:mm")</small>
+                                    </div>
+                                </td>
+                                <td>
+                                    <small>@TruncateText(eventItem.Location, 30)</small>
+                                </td>
+                                <td>
+                                    <div class="text-center">
+                                        <span class="badge bg-primary fw-semibold">
+                                            @eventItem.RegisteredUserIds.Count/@eventItem.MaxParticipants
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge @(eventItem.IsActive ? "bg-success" : "bg-secondary")">
+                                        @(eventItem.IsActive ? "Активна" : "Неактивна")
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-sm btn-outline-primary" 
+                                                @onclick="() => ShowEditEventModal(eventItem)"
+                                                title="Редагувати">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" 
+                                                @onclick="() => DeleteEvent(eventItem.Id)"
+                                                title="Видалити">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-info"
+                                                @onclick="() => LoadRegistrationsForEvent(eventItem)"
+                                                title="Реєстрації">
+                                            <i class="fas fa-users"></i>
+                                        </button>
+
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-5">
+                <i class="fas fa-calendar-times fa-4x text-muted mb-4"></i>
+                <h4 class="text-muted">Подій не знайдено</h4>
+                <p class="text-muted">В системі ще немає створених подій.</p>
+                <button class="btn btn-primary" @onclick="ShowCreateEventModal">
+                    <i class="fas fa-plus me-2"></i>Створити першу подію
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Create/Edit Event Modal -->
+@if (showRegistrations && selectedEvent != null)
+{
+    <div class="mt-4">
+        <h5>Реєстрації на подію: <span class="text-primary">@selectedEvent.Name</span></h5>
+
+        @if (registrations.Any())
+        {
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Ім’я</th>
+                        <th>Email</th>
+                        <th>Дата реєстрації</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in registrations)
+                    {
+                        <tr>
+                            <td>@r.FirstName @r.LastName</td>
+                            <td>@r.Email</td>
+                            <td>@r.RegistrationDate.ToString("dd.MM.yyyy HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <p class="text-muted">Немає зареєстрованих учасників.</p>
+        }
+    </div>
+}
+
+@if (showEventModal)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas @(editingEvent.Id > 0 ? "fa-edit" : "fa-plus") me-2"></i>
+                        @(editingEvent.Id > 0 ? "Редагувати подію" : "Створити подію")
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="HideEventModal"></button>
+                </div>
+                <EditForm Model="@editingEvent" OnValidSubmit="@SaveEvent">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Назва події</label>
+                                    <InputText class="form-control" @bind-Value="editingEvent.Name" placeholder="Введіть назву події" />
+                                    <ValidationMessage For="@(() => editingEvent.Name)" class="text-danger" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Максимум учасників</label>
+                                    <InputNumber class="form-control" @bind-Value="editingEvent.MaxParticipants" />
+                                    <ValidationMessage For="@(() => editingEvent.MaxParticipants)" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Опис</label>
+                            <InputTextArea class="form-control" rows="3" @bind-Value="editingEvent.Description" placeholder="Детальний опис події" />
+                            <ValidationMessage For="@(() => editingEvent.Description)" class="text-danger" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Зображення (URL)</label>
+                            <InputText class="form-control" @bind-Value="editingEvent.ImageUrl" placeholder="Фото https://..." />
+                            <ValidationMessage For="@(() => editingEvent.ImageUrl)" class="text-danger" />
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Дата та час</label>
+                                    <InputDate Type="InputDateType.DateTimeLocal" class="form-control" @bind-Value="editingEvent.Date" />
+                                    <ValidationMessage For="@(() => editingEvent.Date)" class="text-danger" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Місце проведення</label>
+                                    <InputText class="form-control" @bind-Value="editingEvent.Location" placeholder="Адреса або назва місця" />
+                                    <ValidationMessage For="@(() => editingEvent.Location)" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <p><small class="text-muted">Введіть ціну події</small></p>
+                                    <label class="form-label fw-semibold">Ціна (₴)</label>
+                                    <InputNumber class="form-control" @bind-Value="editingEvent.Price" step="0.01" />
+                                    <ValidationMessage For="@(() => editingEvent.Price)" class="text-danger" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                            
+                                <div class="mb-3">
+                                    <p><small class="text-muted">Введіть категорію події</small></p>
+                                    <label class="form-label fw-semibold">Категорія</label>
+                                    <InputText class="form-control" @bind-Value="editingEvent.Category" placeholder="Наприклад: Tech, Workshop, Networking" />
+                                    <ValidationMessage For="@(() => editingEvent.Category)" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <InputCheckbox class="form-check-input" @bind-Value="editingEvent.IsActive" />
+                                <label class="form-check-label fw-semibold">Активна подія</label>
+                                <div class="form-text">Неактивні події не відображаються користувачам</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideEventModal">
+                            Скасувати
+                        </button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            <i class="fas @(editingEvent?.Id > 0 ? "fa-save" : "fa-plus") me-1"></i>
+                            @(editingEvent?.Id > 0 ? "Зберегти" : "Створити")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    private List<Event> events = [];
+    private bool showEventModal = false;
+    private bool isSaving = false;
+    private Event editingEvent = new();
+private Event? selectedEvent;
+    private List<Registration> registrations = [];
+    private bool showRegistrations = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadEvents();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading events: {ex.Message}");
+        }
+    }
+
+    private async Task LoadEvents()
+    {
+        await Task.Delay(100);
+        events = await EventService.GetAllEventsAsync();
+events = events.OrderBy(e => e.Date).ToList();
+
+        StateHasChanged();
+    }
+
+    private void ShowCreateEventModal()
+    {
+        editingEvent = new Event
+        {
+            Date = DateTime.Now.AddDays(7).Date.AddHours(10),
+            IsActive = true,
+            MaxParticipants = 50
+        };
+        showEventModal = true;
+    }
+
+    private void ShowEditEventModal(Event eventItem)
+    {
+        editingEvent = new Event
+        {
+            Id = eventItem.Id,
+            Name = eventItem.Name,
+            Description = eventItem.Description,
+            Date = eventItem.Date,
+            Location = eventItem.Location,
+            MaxParticipants = eventItem.MaxParticipants,
+            IsActive = eventItem.IsActive,
+            RegisteredUserIds = eventItem.RegisteredUserIds,
+            CreatedAt = eventItem.CreatedAt,
+            Price = eventItem.Price,
+            Category = eventItem.Category,
+            ImageUrl = eventItem.ImageUrl
+
+        };
+        showEventModal = true;
+    }
+
+    private void HideEventModal()
+    {
+        showEventModal = false;
+        editingEvent = new Event();
+    }
+
+    private async Task SaveEvent()
+    {
+        isSaving = true;
+        
+        try
+        {
+            bool success;
+            if (editingEvent.Id > 0)
+            {
+                success = await EventService.UpdateEventAsync(editingEvent);
+            }
+            else
+            {
+                success = await EventService.CreateEventAsync(editingEvent);
+            }
+            
+            if (success)
+            {
+                await LoadEvents();
+                HideEventModal();
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteEvent(int eventId)
+    {
+        var success = await EventService.DeleteEventAsync(eventId);
+        if (success)
+        {
+            await LoadEvents();
+        }
+    }
+private async Task LoadRegistrationsForEvent(Event eventItem)
+    {
+        selectedEvent = eventItem;
+        registrations = await RegistrationService.GetRegistrationsForEventAsync(eventItem.Id);
+        showRegistrations = true;
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return text;
+        
+        return text[..maxLength] + "...";
+    }
+}

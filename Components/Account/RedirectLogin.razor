@@ -1,0 +1,88 @@
+@page "/redirect-login"
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Identity
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Navigation
+@inject UserManager<ApplicationUser> UserManager
+@inject UserSessionService Session
+
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // ⬇️ Отримати email з URL
+            var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var email = query.Get("email");
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                Console.WriteLine("[RedirectLogin] Email не передано");
+                Navigation.NavigateTo("/login", true);
+                return;
+            }
+
+            // ⬇️ Знайти користувача
+            var user = await UserManager.FindByEmailAsync(email);
+            if (user == null)
+            {
+                Console.WriteLine("[RedirectLogin] Користувача не знайдено");
+                Navigation.NavigateTo("/login", true);
+                return;
+            }
+
+            // ⬇️ Перевірка активності
+            // ❌ Тимчасово закоментуй
+// if (!user.EmailConfirmed || !user.IsActive)
+// {
+//     Console.WriteLine("[RedirectLogin] Користувач неактивний або не підтвердив email");
+//     Navigation.NavigateTo("/login", true);
+//     return;
+// }
+
+
+            // ⬇️ Створити ClaimsPrincipal
+            var claims = await UserManager.GetClaimsAsync(user);
+            var roles = await UserManager.GetRolesAsync(user);
+
+            var identity = new ClaimsIdentity("Identity.Application");
+            identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName!));
+            identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id));
+
+            foreach (var role in roles)
+                identity.AddClaim(new Claim(ClaimTypes.Role, role));
+
+            foreach (var claim in claims)
+                identity.AddClaim(claim);
+
+            var principal = new ClaimsPrincipal(identity);
+
+            // ✅ Авторизація ДО рендерингу
+            await HttpContextAccessor.HttpContext!.SignInAsync("Identity.Application", principal);
+
+            Console.WriteLine($"[RedirectLogin] Авторизація успішна для {user.Email}");
+            Console.WriteLine($"[RedirectLogin] Ролі: {string.Join(", ", roles)}");
+
+            // ⬇️ Перенаправлення на головну з query-параметром
+           // Navigation.NavigateTo("/?loggedIn=true", true);
+           HttpContextAccessor.HttpContext!.Response.Redirect("/");
+        // ⬇️ Зберегти сесію користувача
+        // після авторизації:
+        // await Session.SetSessionAsync(user.Id, user.UserName!, user.Email!, roles.FirstOrDefault() ?? "User");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RedirectLogin] Помилка: {ex.Message}");
+            Navigation.NavigateTo("/login", true);
+        }
+    
+        
+}
+
+
+
+}

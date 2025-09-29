@@ -1,0 +1,326 @@
+﻿@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserSessionService Session
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@implements IDisposable
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Components.Web
+@rendermode InteractiveServer
+
+
+
+<div class="page">
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-calendar-alt me-2"></i>EventEase
+            </a>
+
+            <!-- Mobile menu button -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <!-- Left side navigation -->
+                <ul class="navbar-nav me-auto">
+                    <AuthorizeView>
+                        <Authorized>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/events">
+                                    <i class="fas fa-calendar me-1"></i>Події
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/profile">
+                                    <i class="fas fa-user me-1"></i>Профіль
+                                </a>
+                            </li>
+                        </Authorized>
+                    </AuthorizeView>
+                </ul>
+
+                <!-- Right side navigation -->
+                <div class="navbar-nav ms-auto">
+                    @if (Session.IsAuthenticated)
+                    {
+                        <div class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-user-circle me-2"></i>
+                                <span class="d-none d-md-inline">@Session.UserName (@Session.Role)</span>
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item" href="/profile">
+                                        <i class="fas fa-user me-2"></i>Мій профіль
+                                    </a>
+                                </li>
+                                @if (Session.Role == "Administrator")
+                                {
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item text-danger" href="/admin">
+                                            <i class="fas fa-cog me-2"></i>Адмін панель
+                                        </a>
+                                    </li>
+                                }
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button class="dropdown-item text-danger" @onclick="Logout">
+                                        <i class="fas fa-sign-out-alt me-2"></i>Вийти
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    }
+                    else
+                    {
+                        <a class="nav-link btn btn-outline-primary me-2" href="/login">
+                            <i class="fas fa-sign-in-alt me-1"></i>
+                            <span class="d-none d-md-inline">Увійти</span>
+                        </a>
+                        <a class="nav-link btn btn-primary" href="/register">
+                            <i class="fas fa-user-plus me-1"></i>
+                            <span class="d-none d-md-inline">Реєстрація</span>
+                        </a>
+                    }
+                </div>
+
+      <!--          <div class="navbar-nav ms-auto">
+                    <AuthorizeView>
+                        <Authorized Context="auth">
+                            <div class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                    <i class="fas fa-user-circle me-2"></i>
+                                    <span class="d-none d-md-inline">@auth.User.Identity?.Name</span>
+                                </a>
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <a class="dropdown-item" href="/profile">
+                                            <i class="fas fa-user me-2"></i>Мій профіль
+                                        </a>
+                                    </li>
+                                    <AuthorizeView Roles="Administrator">
+                                        <Authorized>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item text-danger" href="/admin">
+                                                    <i class="fas fa-cog me-2"></i>Адмін панель
+                                                </a>
+                                            </li>
+                                        </Authorized>
+                                    </AuthorizeView>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>          -->
+  <!--                                      <div class="dropdown-item-text">
+                                            <LogoutButton />
+                                        </div> 
+                                        
+                                        <a class="dropdown-item text-danger" href="/logout">
+                                            <i class="fas fa-sign-out-alt me-2"></i>Вийти
+                                        </a>-->
+  <!--                                      <button class="dropdown-item text-danger" @onclick="Logout">
+                                            <i class="fas fa-sign-out-alt me-2"></i>Вийти
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                        </Authorized>
+                        <NotAuthorized>
+                            <a class="nav-link btn btn-outline-primary me-2" href="/login">
+                                <i class="fas fa-sign-in-alt me-1"></i>
+                                <span class="d-none d-md-inline">Увійти</span>
+                            </a>
+                            <a class="nav-link btn btn-primary" href="/register">
+                                <i class="fas fa-user-plus me-1"></i>
+                                <span class="d-none d-md-inline">Реєстрація</span>
+                            </a>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </div>    -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main content with top padding for fixed navbar -->
+        <main style="padding-top: 76px;">
+        @if (loggedOut)
+        {
+            <div class="alert alert-info text-center m-3">
+                <i class="fas fa-sign-out-alt me-2"></i> Ви успішно вийшли з системи.
+            </div>
+        }
+
+        <ErrorBoundary>
+            <ChildContent>
+                @Body
+            </ChildContent>
+            <ErrorContent>
+                <div class="alert alert-danger m-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Сталася помилка в компоненті. Спробуйте перезавантажити сторінку.
+                </div>
+            </ErrorContent>
+        </ErrorBoundary>
+    </main>
+
+
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>
+                        <i class="fas fa-calendar-alt me-2"></i>EventEase
+                    </h5>
+                    <p class="text-muted">
+                        Ваша платформа для управління та участі у подіях.
+                        Створено з ❤️ на Blazor та .NET 9.
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <h6>Швидкі посилання</h6>
+
+                    <AuthorizeView>
+                        <Authorized>
+                            <ul class="list-unstyled">
+                                <li><a href="/" class="text-muted text-decoration-none">Головна</a></li>
+                                <li><a href="/events" class="text-muted text-decoration-none">Події</a></li>
+                                <li><a href="/profile" class="text-muted text-decoration-none">Профіль</a></li>
+                            </ul>
+                        </Authorized>
+                        <NotAuthorized>
+                            <ul class="list-unstyled">
+                                <li><a href="/" class="text-muted text-decoration-none">Головна</a></li>
+                                <li><a href="/login" class="text-muted text-decoration-none">Увійти</a></li>
+                                <li><a href="/register" class="text-muted text-decoration-none">Реєстрація</a></li>
+                            </ul>
+                        </NotAuthorized>
+                    </AuthorizeView>
+
+                    <div class="d-flex gap-3 mt-3">
+                        <a href="#" class="text-muted"><i class="fab fa-facebook fa-lg"></i></a>
+                        <a href="#" class="text-muted"><i class="fab fa-twitter fa-lg"></i></a>
+                        <a href="#" class="text-muted"><i class="fab fa-instagram fa-lg"></i></a>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-4" />
+
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <small class="text-muted">
+                        © @(DateTime.Now.Year) EventEase. Всі права захищені.
+                    </small>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <small class="text-muted">
+                        Побудовано на .NET 9 та Blazor
+                    </small>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</div>
+
+
+@code {
+
+
+//private HttpClient http = new HttpClient();
+
+//protected override void OnInitialized()
+//{
+//    http.BaseAddress = new Uri(Navigation.BaseUri);
+//}
+
+private bool loggedOut = false;
+private bool sessionLoaded = false;
+
+    protected override void OnInitialized()
+    // protected override async Task OnInitializedAsync()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        loggedOut = query.Get("loggedOut") == "true";
+        
+        Session.OnSessionChanged += StateHasChanged; // 🔔 реактивне оновлення
+
+     //   await Session.LoadSessionAsync(); // ⬅️ Відновлення сесії
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !sessionLoaded)
+        {
+            if (loggedOut)
+            {
+                await Session.ClearSessionAsync(); // ⬅️ очищення після виходу
+            }
+            else
+            {
+                var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    var userId = user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+                    var userName = user.Identity.Name;
+                    var email = user.FindFirst("email")?.Value ?? "";
+                    var role = user.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role")?.Value ?? "User";
+
+                    await Session.SetSessionAsync(userId!, userName!, email, role);
+                }
+            }
+
+            sessionLoaded = true;
+     //       StateHasChanged(); // ⬅️ оновити UI після сесії
+        }
+    }
+
+
+    private void Logout()
+    {
+        Navigation.NavigateTo("/logout", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        Session.OnSessionChanged -= StateHasChanged; // 🧹 відписка
+    }
+
+
+//    private async Task Logout()
+ //       {
+//            Console.WriteLine("[Logout] Виклик кнопки");
+
+ //           try
+//            {
+  //              var response = await http.PostAsync("api/logout", null);
+ //               Console.WriteLine($"[Logout] Статус: {response.StatusCode}");
+
+//                if (response.IsSuccessStatusCode)
+ //               {
+  //                  Navigation.NavigateTo("/", forceLoad: true);
+ //               }
+ //               else
+ //               {
+  //                  Console.WriteLine("[Logout] Вихід неуспішний");
+ //               }
+  //          }
+   //         catch (Exception ex)
+     //       {
+ //               Console.WriteLine($"Logout error: {ex.Message}");
+    //        }
+//        }
+
+
+}
+
+
+

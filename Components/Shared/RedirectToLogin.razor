@@ -1,0 +1,48 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+<!--inject IHttpContextAccessor HttpContextAccessor-->
+@inject NavigationManager Navigation
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <div class="card">
+                <div class="card-body py-5">
+                    <i class="fas fa-lock fa-4x text-primary mb-4"></i>
+                    <h3 class="mb-3">Необхідна авторизація</h3>
+                    <p class="text-muted mb-4">
+                        Для доступу до цієї сторінки потрібно увійти в систему.
+                    </p>
+                    <div class="d-flex justify-content-center gap-3">
+                        <a href="/login" class="btn btn-primary">
+                            <i class="fas fa-sign-in-alt me-2"></i>Увійти
+                        </a>
+                        <a href="/register" class="btn btn-outline-primary">
+                            <i class="fas fa-user-plus me-2"></i>Реєстрація
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // ⏳ Затримка перед редіректом (опційно)
+            await Task.Delay(3000);
+
+            // 🔁 Перенаправлення на головну сторінку
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during redirection: {ex.Message}");
+        }
+    }
+}
+
+

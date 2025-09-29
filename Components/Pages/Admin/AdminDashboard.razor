@@ -1,0 +1,253 @@
+@page "/admin"
+@using EventEaseF.Services
+@using EventEaseF.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject UserService UserService
+@inject EventDbService EventService
+@inject RegistrationService RegistrationService
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>Адміністративна панель - EventEase</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-xl-2 col-lg-3 col-md-4">
+            <div class="admin-sidebar p-3 sticky-top" style="top: 80px;">
+                <div class="text-center mb-4">
+                    <i class="fas fa-shield-alt fa-3x text-primary mb-2"></i>
+                    <h5 class="fw-bold">Адмін панель</h5>
+                    <small class="text-muted">Система управління</small>
+                </div>
+                
+                <div class="list-group list-group-flush">
+                    <button class="list-group-item list-group-item-action @(activeTab == "dashboard" ? "active" : "")"
+                            @onclick="@(() => SetActiveTab("dashboard"))">
+                        <i class="fas fa-tachometer-alt me-3"></i>
+                        <span>Dashboard</span>
+                        
+@if
+ 
+(activeTab == "dashboard")
+                  
+{
+                     
+    <i class="fas fa-chevron-right ms-auto"></i>
+                   
+}
+
+                    </button>
+                    
+                    <button class="list-group-item list-group-item-action @(activeTab == "events" ? "active" : "")"
+                            @onclick="@(() => SetActiveTab("events"))">
+                        <i class="fas fa-calendar me-3"></i>
+                        <span>Події</span>
+                        <span class="badge bg-primary ms-auto">@totalEvents</span>
+                    </button>
+                    
+                    <button class="list-group-item list-group-item-action @(activeTab == "users" ? "active" : "")"
+                            @onclick="@(() => SetActiveTab("users"))">
+                        <i class="fas fa-users me-3"></i>
+                        <span>Користувачі</span>
+                        <span class="badge bg-success ms-auto">@totalUsers</span>
+                    </button>
+                </div>
+                
+                <div class="mt-4 pt-3 border-top">
+                    <a href="/" class="btn btn-outline-secondary btn-sm w-100">
+                        <i class="fas fa-arrow-left me-2"></i>Назад до сайту
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-xl-10 col-lg-9 col-md-8">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">
+                        @GetTabTitle()
+                    </h2>
+                    <nav>
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item">
+                                <a href="/admin" class="text-decoration-none">Адміністрування</a>
+                            </li>
+                            <li class="breadcrumb-item active">@GetTabTitle()</li>
+                        </ol>
+                    </nav>
+                </div>
+                
+                <div class="text-end">
+                    <small class="text-muted d-block">Останнє оновлення:</small>
+                    <small class="fw-semibold">@DateTime.Now.ToString("dd.MM.yyyy HH:mm")</small>
+                </div>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                
+@if
+ 
+(activeTab == "dashboard")
+
+                
+{
+
+                    
+<AdminDashboardView />
+
+                
+}
+
+                
+else if
+ 
+(activeTab == "events")
+
+                
+{                    
+<AdminEventsView />                
+}
+
+                
+else if
+ 
+(activeTab == "users")                
+{                   
+<AdminUsersView />
+}
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int totalUsers;
+    private int totalEvents;
+    private int activeEvents;
+    private int upcomingEvents;
+    private int totalRegistrations;
+    private int averageRegistrations;
+    private int newUsersThisMonth;
+    private string nextEventDate = "Не заплановано";
+    private string lastUpdateTime = DateTime.Now.ToString("HH:mm");
+
+    private List<Event> upcomingEventsList = [];
+    private List<ApplicationUser> recentUsers = [];
+
+private string activeTab = "dashboard";
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    private string GetTabTitle()
+    {
+        return activeTab switch
+        {
+            "dashboard" => "Огляд",
+            "events" => "Управління подіями",
+            "users" => "Користувачі",
+            _ => "Адмін панель"
+        };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try 
+        {
+            await LoadStatistics();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading statistics: {ex.Message}");
+            }
+    }
+
+    private async Task LoadStatistics()
+    {
+        var users = await UserService.GetAllUsersAsync();
+        var events = await EventService.GetAllEventsAsync();
+
+        totalUsers = users.Count;
+        totalEvents = events.Count;
+        activeEvents = events.Count(e => e.Date > DateTime.Now);
+        upcomingEvents = events.Count(e => e.Date > DateTime.Now);
+        totalRegistrations = events.Sum(e => e.RegisteredUserIds.Count);
+        averageRegistrations = events.Any() ? totalRegistrations / events.Count : 0;
+        newUsersThisMonth = users.Count(u => u.CreatedAt.Month == DateTime.Now.Month && u.CreatedAt.Year == DateTime.Now.Year);
+
+        upcomingEventsList = events
+            .Where(e => e.Date > DateTime.Now)
+            .OrderBy(e => e.Date)
+            .ToList();
+
+        if (upcomingEventsList.Any())
+        {
+            nextEventDate = upcomingEventsList.First().Date.ToString("dd.MM");
+        }
+
+        recentUsers = users
+            .OrderByDescending(u => u.CreatedAt)
+            .ToList();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadStatistics();
+        lastUpdateTime = DateTime.Now.ToString("HH:mm");
+        StateHasChanged();
+    }
+
+    private async Task ExportData()
+    {
+        await Task.Delay(1000);
+        // Реалізуй експорт тут
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return text;
+
+        return text.Substring(0, maxLength) + "...";
+    }
+
+    private double GetOccupancyPercentage(Event eventItem)
+    {
+        if (eventItem.MaxParticipants == 0) return 0;
+        return Math.Round((double)eventItem.RegisteredUserIds.Count / eventItem.MaxParticipants * 100, 1);
+    }
+
+    private string GetProgressBarClass(Event eventItem)
+    {
+        var percentage = GetOccupancyPercentage(eventItem);
+        return percentage switch
+        {
+            >= 90 => "bg-danger",
+            >= 70 => "bg-warning",
+            >= 50 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+
+    private string GetEventStatusClass(Event eventItem)
+    {
+        if (eventItem.IsFull) return "bg-danger";
+        if (eventItem.RegisteredUserIds.Count > eventItem.MaxParticipants * 0.8) return "bg-warning";
+        return "bg-success";
+    }
+
+    private string GetEventStatus(Event eventItem)
+    {
+        if (eventItem.IsFull) return "Заповнена";
+        if (eventItem.RegisteredUserIds.Count > eventItem.MaxParticipants * 0.8) return "Майже заповнена";
+        return "Доступна";
+    }
+}
+

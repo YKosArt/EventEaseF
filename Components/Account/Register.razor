@@ -1,0 +1,299 @@
+@using Microsoft.AspNetCore.Identity
+@page "/register"
+@using EventEaseF.Services
+@inject UserManager<ApplicationUser> UserManager
+
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Реєстрація - EventEase</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8">
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-success text-white text-center py-4">
+                    <h3 class="mb-0">
+                        <i class="fas fa-user-plus me-2"></i>Створити акаунт
+                    </h3>
+                    <p class="mb-0 mt-2 opacity-75">Приєднайтесь до EventEase сьогодні</p>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (!string.IsNullOrEmpty(ErrorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="fas fa-exclamation-triangle me-2"></i>@ErrorMessage
+                            <button type="button" class="btn-close" @onclick="() => ErrorMessage = string.Empty"></button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(SuccessMessage))
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="fas fa-check-circle me-2"></i>@SuccessMessage
+                            <button type="button" class="btn-close" @onclick="() => SuccessMessage = string.Empty"></button>
+                        </div>
+                    }
+
+                    <EditForm Model="@registerModel" OnValidSubmit="@HandleRegister">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label for="name" class="form-label fw-semibold">
+                                <i class="fas fa-user me-2"></i>Повне ім'я
+                            </label>
+                            <InputText id="name" 
+                                      class="form-control form-control-lg" 
+                                      @bind-Value="registerModel.Name" 
+                                      placeholder="Ваше повне ім'я" />
+                            <ValidationMessage For="@(() => registerModel.Name)" class="text-danger mt-1" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-semibold">
+                                <i class="fas fa-envelope me-2"></i>Email адреса
+                            </label>
+                            <InputText id="email" 
+                                      class="form-control form-control-lg" 
+                                      @bind-Value="registerModel.Email" 
+                                      placeholder="your@email.com" />
+                            <ValidationMessage For="@(() => registerModel.Email)" class="text-danger mt-1" />
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Ми використовуємо email для входу та сповіщень
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label fw-semibold">
+                                <i class="fas fa-lock me-2"></i>Пароль
+                            </label>
+                            <div class="input-group">
+                                <InputText id="password" 
+                                          type="@(showPassword ? "text" : "password")"
+                                          class="form-control form-control-lg" 
+                                          @bind-Value="registerModel.Password" 
+                                          placeholder="Щонайменше 6 символів" />
+                                <button type="button" 
+                                        class="btn btn-outline-secondary" 
+                                        @onclick="TogglePasswordVisibility">
+                                    <i class="fas @(showPassword ? "fa-eye-slash" : "fa-eye")"></i>
+                                </button>
+                            </div>
+                            <ValidationMessage For="@(() => registerModel.Password)" class="text-danger mt-1" />
+                            
+                            <!-- Password Strength Indicator -->
+                            @if (!string.IsNullOrEmpty(registerModel.Password))
+                            {
+                                <div class="mt-2">
+                                    <small class="text-muted">Складність паролю:</small>
+                                    <div class="progress mt-1" style="height: 4px;">
+                                        <div class="progress-bar @GetPasswordStrengthClass()" 
+                                             style="width: @GetPasswordStrengthPercentage()%"></div>
+                                    </div>
+                                    <small class="@GetPasswordStrengthTextClass()">@GetPasswordStrengthText()</small>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="confirmPassword" class="form-label fw-semibold">
+                                <i class="fas fa-lock me-2"></i>Підтвердження паролю
+                            </label>
+                            <InputText id="confirmPassword" 
+                                      type="password" 
+                                      class="form-control form-control-lg" 
+                                      @bind-Value="registerModel.ConfirmPassword" 
+                                      placeholder="Повторіть пароль" />
+                            <ValidationMessage For="@(() => registerModel.ConfirmPassword)" class="text-danger mt-1" />
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <InputCheckbox id="agreeToTerms" class="form-check-input" @bind-Value="registerModel.AgreeToTerms" />
+                                <label class="form-check-label" for="agreeToTerms">
+                                    Я погоджуюся з <a href="#" class="text-decoration-none">умовами використання</a> 
+                                    та <a href="#" class="text-decoration-none">політикою конфіденційності</a>
+                                </label>
+                                <ValidationMessage For="@(() => registerModel.AgreeToTerms)" class="text-danger mt-1" />
+                            </div>
+                        </div>
+
+                        <button type="submit" 
+                                class="btn btn-success btn-lg w-100 mb-3" 
+                                disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                <span>Створення акаунту...</span>
+                            }
+                            else
+                            {
+                                <i class="fas fa-user-plus me-2"></i>
+                                <span>Створити акаунт</span>
+                            }
+                        </button>
+                    </EditForm>
+
+                    <div class="text-center">
+                        <p class="text-muted mb-3">Вже є акаунт?</p>
+                        <a href="/login" class="btn btn-outline-primary">
+                            <i class="fas fa-sign-in-alt me-2"></i>Увійти в систему
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private RegisterModel registerModel = new();
+    private bool isLoading = false;
+    private bool showPassword = false;
+    private string ErrorMessage = string.Empty;
+    private string SuccessMessage = string.Empty;
+
+    public class RegisterModel : IValidatableObject
+    {
+        [Required(ErrorMessage = "Ім'я обов'язкове")]
+        [StringLength(100, MinimumLength = 2, ErrorMessage = "Ім'я має бути від 2 до 100 символів")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email обов'язковий")]
+        [EmailAddress(ErrorMessage = "Невірний формат email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Пароль обов'язковий")]
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "Пароль має бути від 6 до 100 символів")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Підтвердження паролю обов'язкове")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+
+        [Range(typeof(bool), "true", "true", ErrorMessage = "Необхідно погодитись з умовами використання")]
+        public bool AgreeToTerms { get; set; } = false;
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (Password != ConfirmPassword)
+            {
+                yield return new ValidationResult("Паролі не збігаються", new[] { nameof(ConfirmPassword) });
+            }
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        isLoading = true;
+        ErrorMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        try
+        {
+        var existingUser = await UserManager.FindByEmailAsync(registerModel.Email);
+        if (existingUser != null)
+        {
+            ErrorMessage = "Користувач з таким email вже існує.";
+            return;
+        }
+
+        var newUser = new ApplicationUser
+{
+    UserName = registerModel.Email,
+    Email = registerModel.Email,
+    Name = registerModel.Name,
+    CreatedAt = DateTime.UtcNow,
+    IsActive = true
+};
+
+
+        var result = await UserManager.CreateAsync(newUser, registerModel.Password);
+
+        if (result.Succeeded)
+        {
+            // Додати роль за замовчуванням (опціонально)
+            await UserManager.AddToRoleAsync(newUser, "User");
+
+            SuccessMessage = "Акаунт успішно створено! Перенаправляємо на сторінку входу...";
+            registerModel = new RegisterModel();
+
+            await Task.Delay(2000);
+            Navigation.NavigateTo("/login");
+        }
+        else
+        {
+            ErrorMessage = string.Join("; ", result.Errors.Select(e => e.Description));
+        }
+    }
+
+        catch (Exception ex)
+        {
+            ErrorMessage = "Сталася помилка при реєстрації. Спробуйте пізніше.";
+            Console.WriteLine($"Registration error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        showPassword = !showPassword;
+    }
+
+    private int GetPasswordStrength()
+    {
+        var password = registerModel.Password ?? string.Empty;
+        var score = 0;
+
+        if (password.Length >= 6) score++;
+        if (password.Length >= 8) score++;
+        if (password.Any(char.IsLower)) score++;
+        if (password.Any(char.IsUpper)) score++;
+        if (password.Any(char.IsDigit)) score++;
+        if (password.Any(c => !char.IsLetterOrDigit(c))) score++;
+
+        return score;
+    }
+
+    private string GetPasswordStrengthClass()
+    {
+        return GetPasswordStrength() switch
+        {
+            <= 2 => "bg-danger",
+            3 or 4 => "bg-warning", 
+            5 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+
+    private string GetPasswordStrengthTextClass()
+    {
+        return GetPasswordStrength() switch
+        {
+            <= 2 => "text-danger",
+            3 or 4 => "text-warning",
+            5 => "text-info", 
+            _ => "text-success"
+        };
+    }
+
+    private string GetPasswordStrengthText()
+    {
+        return GetPasswordStrength() switch
+        {
+            <= 2 => "Слабкий",
+            3 or 4 => "Середній",
+            5 => "Сильний",
+            _ => "Дуже сильний"
+        };
+    }
+
+    private double GetPasswordStrengthPercentage()
+    {
+        return GetPasswordStrength() / 6.0 * 100;
+    }
+}

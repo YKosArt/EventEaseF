@@ -1,0 +1,373 @@
+@using EventEaseF.Services
+@using EventEaseF.Models
+@using System.Security.Claims
+@inject UserService UserService
+@inject EventDbService EventService
+@rendermode InteractiveServer
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-bolt me-2"></i>Швидкі дії
+                </h5>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-primary btn-sm" @onclick="RefreshData">
+                        <i class="fas fa-refresh me-1"></i>Оновити дані
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-plus me-1"></i>Створити подію
+                    </button>
+                    <button class="btn btn-info btn-sm" @onclick="ExportData">
+                        <i class="fas fa-download me-1"></i>Експорт
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center text-white">
+                <i class="fas fa-users fa-3x mb-3 opacity-75"></i>
+                <h3 class="mb-1">@totalUsers</h3>
+                <p class="mb-2">Всього користувачів</p>
+                <small class="opacity-75">
+                    <i class="fas fa-arrow-up me-1"></i>
+                    +@newUsersThisMonth цього місяця
+                </small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-3">
+        <div class="card stat-card h-100" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+            <div class="card-body text-center text-white">
+                <i class="fas fa-calendar fa-3x mb-3 opacity-75"></i>
+                <h3 class="mb-1">@totalEvents</h3>
+                <p class="mb-2">Всього подій</p>
+                <small class="opacity-75">
+                    <i class="fas fa-arrow-up me-1"></i>
+                    @activeEvents активних
+                </small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-3">
+        <div class="card stat-card h-100" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <div class="card-body text-center text-white">
+                <i class="fas fa-calendar-check fa-3x mb-3 opacity-75"></i>
+                <h3 class="mb-1">@upcomingEvents</h3>
+                <p class="mb-2">Майбутні події</p>
+                <small class="opacity-75">
+                    <i class="fas fa-clock me-1"></i>
+                    Найближча: @nextEventDate
+                </small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-lg-6 col-md-6 mb-3">
+        <div class="card stat-card h-100" style="background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);">
+            <div class="card-body text-center text-white">
+                <i class="fas fa-user-check fa-3x mb-3 opacity-75"></i>
+                <h3 class="mb-1">@totalRegistrations</h3>
+                <p class="mb-2">Всього реєстрацій</p>
+                <small class="opacity-75">
+                    <i class="fas fa-chart-line me-1"></i>
+                    @averageRegistrations в середньому
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Events -->
+    <div class="col-lg-8 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-alt me-2"></i>Найближчі події
+                    </h5>
+                    <button class="btn btn-sm btn-outline-primary">Всі події</button>
+                </div>
+            </div>
+            <div class="card-body">
+                @if (upcomingEventsList.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Подія</th>
+                                    <th>Дата</th>
+                                    <th>Місце</th>
+                                    <th>Учасники</th>
+                                    <th>Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var eventItem in upcomingEventsList.Take(5))
+                                {
+                                    <tr>
+                                        <td>
+                                            <div>
+                                                <div class="fw-semibold">@eventItem.Name</div>
+                                                <small class="text-muted">@TruncateText(eventItem.Description, 50)</small>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="text-nowrap">
+                                                <div>@eventItem.Date.ToString("dd.MM.yyyy")</div>
+                                                <small class="text-muted">@eventItem.Date.ToString("HH:mm")</small>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <small>@TruncateText(eventItem.Location, 30)</small>
+                                        </td>
+                                        <td>
+                                            <div class="text-center">
+                                                <div class="fw-semibold">@eventItem.RegisteredUserIds.Count/@eventItem.MaxParticipants</div>
+                                                <div class="progress mt-1" style="height: 4px;">
+                                                    <div class="progress-bar @GetProgressBarClass(eventItem)" 
+                                                         style="width: @GetOccupancyPercentage(eventItem)%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge @GetEventStatusClass(eventItem)">
+                                                @GetEventStatus(eventItem)
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4">
+                        <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Немає майбутніх подій</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Users & System Info -->
+    <div class="col-lg-4">
+        <!-- Recent Users -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-plus me-2"></i>Нові користувачі
+                </h5>
+            </div>
+            <div class="card-body">
+                @if (recentUsers.Any())
+                {
+                    @foreach (var user in recentUsers.Take(5))
+                    {
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center me-3" 
+                                 style="width: 40px; height: 40px;">
+                                <i class="fas fa-user text-white"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold">@user.Name</div>
+                                <small class="text-muted">@user.Email</small>
+                                <div>
+                                    <small class="text-muted">
+                                        @user.CreatedAt.ToString("dd.MM.yyyy")
+                                    </small>
+                                    <span class="badge @(user.Role == UserRole.Administrator ? "bg-danger" : "bg-primary") ms-2">
+                                        @(user.Role == UserRole.Administrator ? "Admin" : "User")
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-3">
+                        <i class="fas fa-users-slash fa-2x text-muted mb-2"></i>
+                        <p class="text-muted small">Немає нових користувачів</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- System Info -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Системна інформація
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 border-end">
+                        <div class="fw-semibold text-primary">@DateTime.Now.ToString("dd.MM")</div>
+                        <small class="text-muted">Сьогодні</small>
+                    </div>
+                    <div class="col-6">
+                        <div class="fw-semibold text-success">Online</div>
+                        <small class="text-muted">Статус</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="small">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Версія:</span>
+                        <span class="fw-semibold">.NET 9.0</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Framework:</span>
+                        <span class="fw-semibold">Blazor</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Останнє оновлення:</span>
+                        <span class="fw-semibold">@lastUpdateTime</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int totalUsers;
+    private int totalEvents;
+    private int activeEvents;
+    private int upcomingEvents;
+    private int totalRegistrations;
+    private int averageRegistrations;
+    private int newUsersThisMonth;
+    private string nextEventDate = "Не заплановано";
+    private string lastUpdateTime = DateTime.Now.ToString("HH:mm");
+
+    private List<Event> upcomingEventsList = [];
+    private List<ApplicationUser> recentUsers = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try {
+            await LoadStatistics();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading statistics: {ex.Message}");
+        }
+    }
+private string activeTab = "dashboard";
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    private string GetTabTitle()
+    {
+        return activeTab switch
+        {
+            "dashboard" => "Огляд",
+            "events" => "Управління подіями",
+            "users" => "Користувачі",
+            _ => "Адмін панель"
+        };
+    }
+
+    private async Task LoadStatistics()
+    {
+        var users = await UserService.GetAllUsersAsync();
+        var events = await EventService.GetAllEventsAsync();
+
+        totalUsers = users.Count;
+        totalEvents = events.Count;
+        activeEvents = events.Count(e => e.Date > DateTime.Now);
+        upcomingEvents = events.Count(e => e.Date > DateTime.Now);
+        totalRegistrations = events.Sum(e => e.RegisteredUserIds.Count);
+        averageRegistrations = events.Any() ? totalRegistrations / events.Count : 0;
+        newUsersThisMonth = users.Count(u => u.CreatedAt.Month == DateTime.Now.Month && u.CreatedAt.Year == DateTime.Now.Year);
+
+        upcomingEventsList = events
+            .Where(e => e.Date > DateTime.Now)
+            .OrderBy(e => e.Date)
+            .ToList();
+
+        if (upcomingEventsList.Any())
+        {
+            nextEventDate = upcomingEventsList.First().Date.ToString("dd.MM");
+        }
+
+        recentUsers = users
+            .OrderByDescending(u => u.CreatedAt)
+            .ToList();
+    }
+
+    private async Task RefreshData()
+
+    {
+        await LoadStatistics();
+        lastUpdateTime = DateTime.Now.ToString("HH:mm");
+        StateHasChanged();
+    }
+
+    private async Task ExportData()
+    {
+        // Simulate export
+        await Task.Delay(1000);
+        // Here you could implement actual export functionality
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return text;
+        
+        return text.Substring(0, maxLength) + "...";
+    }
+
+    private double GetOccupancyPercentage(Event eventItem)
+    {
+        if (eventItem.MaxParticipants == 0) return 0;
+        return Math.Round((double)eventItem.RegisteredUserIds.Count / eventItem.MaxParticipants * 100, 1);
+    }
+
+    private string GetProgressBarClass(Event eventItem)
+    {
+        var percentage = GetOccupancyPercentage(eventItem);
+        return percentage switch
+        {
+            >= 90 => "bg-danger",
+            >= 70 => "bg-warning",
+            >= 50 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+
+    private string GetEventStatusClass(Event eventItem)
+    {
+        if (eventItem.IsFull) return "bg-danger";
+        if (eventItem.RegisteredUserIds.Count > eventItem.MaxParticipants * 0.8) return "bg-warning";
+        return "bg-success";
+    }
+
+    private string GetEventStatus(Event eventItem)
+    {
+        if (eventItem.IsFull) return "Заповнена";
+        if (eventItem.RegisteredUserIds.Count > eventItem.MaxParticipants * 0.8) return "Майже заповнена";
+        return "Доступна";
+    }
+}
