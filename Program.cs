@@ -101,7 +101,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 // 🔗 Маршрутизація компонентів
-app.MapStaticAssets();
+// app.MapStaticAssets();
 app.MapRazorPages(); // Для помилок
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
