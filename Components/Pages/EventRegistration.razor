@@ -180,9 +180,17 @@
     private bool isSubmitting = false;
     private bool isSubmitted = false;
 
+    
     protected override async Task OnInitializedAsync()
     {
-        await LoadEventAsync();
+        try
+        {
+            await LoadEventAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔥 Component crash: {ex.Message}");
+        }
     }
 
     private async Task LoadEventAsync()

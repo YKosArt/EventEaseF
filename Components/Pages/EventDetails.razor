@@ -112,7 +112,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await RefreshEventWithUser();
+        try
+        {
+            await RefreshEventWithUser();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"🔥 Component crash: {ex.Message}");
+        }
     }
 
     private async Task RefreshEventWithUser()
