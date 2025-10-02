@@ -17,11 +17,11 @@ builder.Services.AddHttpContextAccessor();
 // 🔧 База даних SQLite
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 // 🔧 Сервіс роботи з подіями
 builder.Services.AddScoped<EventDbService>();
 
-
-// 🔐 ASP.NET Core Identity — обов’язково для UserManager, SignInManager, авторизації
+// 🔐 ASP.NET Core Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false;
@@ -33,49 +33,43 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
-// ✅ Авторизація — без дублювання схеми
 builder.Services.AddAuthorization();
-
-// 🔄 Blazor автентифікація
 builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 builder.Services.AddCascadingAuthenticationState();
-// 🔄 API контролери
-builder.Services.AddControllers(); // для API
-
-builder.Services.AddHttpClient(); // ✅ Це реєструє HttpClient для ін’єкції
-
-
+builder.Services.AddControllers();
+builder.Services.AddHttpClient();
 
 // 🧱 Razor Components
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddInteractiveWebAssemblyComponents();
 
-// 🛠️ Custom services — після Identity
+// 🛠️ Custom services
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<UserSessionService>();
 builder.Services.AddScoped<ProtectedSessionStorage>();
-// builder.Services.AddScoped<EventService>();
 builder.Services.AddScoped<RegistrationService>();
 builder.Services.AddScoped<AuthService>();
 
 // 🔧 Логування
 builder.Logging.SetMinimumLevel(LogLevel.Debug);
 builder.Logging.AddConsole();
-// 🔧 Razor Pages (для помилок)
 builder.Services.AddRazorPages();
-
 
 var app = builder.Build();
 
-// 🔧 Ініціалізація ролей та користувачів
+// 🔧 Ініціалізація бази та ролей
 using (var scope = app.Services.CreateScope())
 {
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.EnsureCreated(); // 🔥 Створює таблиці, якщо їх немає
+
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
     await IdentityInitializer.SeedRolesAsync(roleManager);
     await IdentityInitializer.SeedUsersAsync(userManager);
+    await EventSeeder.SeedEventsAsync(db);
 }
 
 // 🔧 Middleware
@@ -93,29 +87,17 @@ else
 app.UseStaticFiles();
 app.UseRouting();
 app.UseHttpsRedirection();
-app.MapControllers(); // для маршрутизації       // 🔥 після app.UseRouting()
+app.MapControllers();
 
-
-app.UseAuthentication(); // ✅ Обов’язково перед Authorization
+app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
 // 🔗 Маршрутизація компонентів
-// app.MapStaticAssets();
-app.MapRazorPages(); // Для помилок
+// app.MapStaticAssets(); // ❌ недоступно в .NET 8 — залишено закоміченим
+app.MapRazorPages();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddInteractiveWebAssemblyRenderMode();
-
-// 🔧 Ініціалізація бази даних подій
-
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await EventSeeder.SeedEventsAsync(db);
-}
-
-
-
 
 app.Run();
